@@ -514,7 +514,7 @@ export default function OnboardingScreen() {
   const CurrentScreen = SCREENS[step];
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       {step > 0 && (
         <TouchableOpacity
           onPress={back}
