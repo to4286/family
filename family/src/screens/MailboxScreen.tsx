@@ -9,18 +9,22 @@ import {
   Modal,
   StyleSheet,
   Platform,
+  Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Polygon, Polyline, Rect } from "react-native-svg";
+import Svg, { Path, Polygon, Polyline, Rect } from "react-native-svg";
 import { Colors } from "../constants/colors";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+const SCREEN_H          = Dimensions.get("window").height;
+
 const PAPER_BG          = "#FFFDF8";
 const PAPER_LINE        = "#EDD9C5";
-const LINE_H            = 40;
+const LINE_H            = 34;
 const LINE_MX           = 24;
 const MAX_CONTENT_LEN   = 500;
+const WRITE_PAPER_H     = 22 * LINE_H;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -125,6 +129,30 @@ function AddrBlock({
   );
 }
 
+// ─── WriteAddrBlock ───────────────────────────────────────────────────────────
+// WriteScreen 전용: label + nickname 가로 배치, 밑줄, role 미표시
+
+function WriteAddrBlock({
+  label,
+  person,
+  align = "left",
+}: {
+  label: "to." | "from.";
+  person: Person;
+  align?: "left" | "right";
+}) {
+  return (
+    <View style={align === "right" ? styles.writeAddrRight : undefined}>
+      <View style={styles.writeAddrRow}>
+        <Text style={styles.addrLabel}>{label}</Text>
+        <View style={styles.writeAddrNameWrap}>
+          <Text style={styles.addrName}>{person.nickname}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ─── LetterDetailModal ────────────────────────────────────────────────────────
 
 function LetterDetailModal({
@@ -141,10 +169,7 @@ function LetterDetailModal({
   if (letter) lastLetter.current = letter;
   const l = lastLetter.current;
 
-  const lineCount = l
-    ? Math.max(8, Math.ceil(l.content.split("\n").length * 1.5))
-    : 8;
-  const contentH = lineCount * LINE_H;
+  const [bodyHeight, setBodyHeight] = useState(0);
 
   return (
     <Modal
@@ -153,13 +178,8 @@ function LetterDetailModal({
       animationType="fade"
       onRequestClose={onClose}
     >
-      <TouchableOpacity
-        style={styles.overlay}
-        onPress={onClose}
-        activeOpacity={1}
-      >
-        {/* stopPropagation 대용: activeOpacity={1} 내부 카드 */}
-        <TouchableOpacity activeOpacity={1} style={styles.detailCard}>
+      <View style={styles.overlay}>
+        <View style={styles.detailCard}>
           {/* 닫기 버튼 */}
           <View style={styles.detailCloseRow}>
             <TouchableOpacity onPress={onClose} style={styles.detailCloseBtn}>
@@ -171,21 +191,25 @@ function LetterDetailModal({
           <ScrollView
             style={styles.detailScroll}
             showsVerticalScrollIndicator={false}
+            nestedScrollEnabled={true}
           >
             {/* TO */}
             <View style={styles.detailToSection}>
-              <AddrBlock label="to." person={l?.to ?? { nickname: "", role: "" }} />
+              <WriteAddrBlock label="to." person={l?.to ?? { nickname: "", role: "" }} />
             </View>
 
             {/* 본문 + 줄 */}
-            <View style={[styles.detailBody, { minHeight: contentH }]}>
-              <PaperLines containerH={contentH} />
+            <View
+              style={styles.detailBody}
+              onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}
+            >
+              <PaperLines containerH={bodyHeight} />
               <Text style={styles.letterContent}>{l?.content}</Text>
             </View>
 
             {/* FROM */}
             <View style={styles.detailFromSection}>
-              <AddrBlock
+              <WriteAddrBlock
                 label="from."
                 person={l?.from ?? { nickname: "", role: "" }}
                 align="right"
@@ -199,8 +223,8 @@ function LetterDetailModal({
               <Text style={styles.btnReplyText}>답장하기</Text>
             </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-      </TouchableOpacity>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -219,10 +243,8 @@ function WriteScreen({
   const [content, setContent]             = useState("");
   const [showSentModal, setShowSentModal] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
-
-  const lineCount = Math.max(8, Math.ceil((content.split("\n").length + 2) * 1.2));
-  const contentH  = lineCount * LINE_H;
-  const canSend   = content.trim().length > 0;
+  const scrollRef = useRef<ScrollView>(null);
+  const canSend  = content.trim().length > 0;
 
   const handleBack = () => {
     if (canSend) setShowExitModal(true);
@@ -243,7 +265,15 @@ function WriteScreen({
         {/* 헤더 */}
         <View style={styles.writeHeader}>
           <TouchableOpacity onPress={handleBack} style={styles.writeBackBtn}>
-            <Text style={styles.writeBackIcon}>←</Text>
+            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+              <Path
+                d="M15 18l-6-6 6-6"
+                stroke={Colors.textSub}
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Svg>
           </TouchableOpacity>
           <Text style={styles.writeTitle}>편지 쓰기</Text>
           <TouchableOpacity onPress={canSend ? () => setShowSentModal(true) : undefined}>
@@ -260,19 +290,21 @@ function WriteScreen({
 
         {/* 편지지 스크롤 */}
         <ScrollView
+          ref={scrollRef}
           style={styles.writeScroll}
           contentContainerStyle={styles.writeScrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
         >
           {/* TO */}
           <View style={styles.writeTo}>
-            <AddrBlock label="to." person={receiver} />
+            <WriteAddrBlock label="to." person={receiver} />
           </View>
 
           {/* 본문 편지지 + 줄 */}
-          <View style={[styles.writePaper, { minHeight: contentH }]}>
-            <PaperLines containerH={contentH} />
+          <View style={styles.writePaper}>
+            <PaperLines containerH={WRITE_PAPER_H} />
             <TextInput
               multiline
               scrollEnabled={false}
@@ -280,17 +312,15 @@ function WriteScreen({
               onChangeText={(text) => setContent(text.slice(0, MAX_CONTENT_LEN))}
               placeholder="마음을 담아 편지를 써보세요..."
               placeholderTextColor={Colors.textHint}
-              style={[styles.writeInput, { minHeight: contentH }]}
+              style={styles.writeInput}
               textAlignVertical="top"
             />
-            <Text style={styles.writeCounter}>
-              {content.length}/{MAX_CONTENT_LEN}
-            </Text>
+            <Text style={styles.writeCounter}>{content.length}/{MAX_CONTENT_LEN}</Text>
           </View>
 
           {/* FROM */}
           <View style={styles.writeFrom}>
-            <AddrBlock label="from." person={SENDER} align="right" />
+            <WriteAddrBlock label="from." person={SENDER} align="right" />
           </View>
         </ScrollView>
 
@@ -524,9 +554,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  envelopeFrom: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
+  envelopeFrom: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
   envelopeFromLabel: { fontSize: 13, color: Colors.textHint },
-  envelopeFromName: { fontSize: 16, fontWeight: "500", color: Colors.text },
+  envelopeFromName: { fontSize: 16, fontWeight: "500", color: Colors.text, marginBottom: 3 },
   envelopeFromRole: { fontSize: 13, color: Colors.textHint },
   envelopeDateBadge: {
     borderWidth: 1,
@@ -559,9 +589,16 @@ const styles = StyleSheet.create({
 
   // ── Addr block ──
   addrLabel: { fontSize: 12, color: Colors.textHint, marginBottom: 4 },
-  addrName:  { fontSize: 15, fontWeight: "500", color: Colors.text },
+  addrName:  { fontSize: 15, fontWeight: "500", color: Colors.text, marginBottom: 4 },
   addrRole:  { fontSize: 12, color: Colors.textSub },
   addrRight: { alignItems: "flex-end" },
+  writeAddrRow: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
+  writeAddrNameWrap: {
+    borderBottomWidth: 1,
+    borderBottomColor: PAPER_LINE,
+    paddingBottom: 2,
+  },
+  writeAddrRight: { alignSelf: "flex-end" },
 
   // ── Letter content (read) ──
   letterContent: {
@@ -581,7 +618,7 @@ const styles = StyleSheet.create({
   },
   detailCard: {
     width: "90%",
-    maxHeight: "80%",
+    height: SCREEN_H * 0.8,
     borderRadius: 24,
     overflow: "hidden",
     backgroundColor: PAPER_BG,
@@ -594,23 +631,23 @@ const styles = StyleSheet.create({
   detailCloseRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    paddingTop: 8,
-    paddingRight: 8,
+    paddingTop: 16,
+    paddingRight: 16,
     paddingBottom: 4,
     backgroundColor: PAPER_BG,
   },
   detailCloseBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Colors.surface,
     alignItems: "center",
     justifyContent: "center",
   },
-  detailCloseIcon: { fontSize: 14, color: Colors.textSub },
-  detailScroll: { backgroundColor: PAPER_BG },
+  detailCloseIcon: { fontSize: 18, color: Colors.textSub },
+  detailScroll: { flex: 1, backgroundColor: PAPER_BG },
   detailToSection: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
-  detailBody: { position: "relative" },
+  detailBody: { position: "relative", paddingBottom: LINE_H },
   detailFromSection: {
     paddingHorizontal: 20,
     paddingTop: 16,
@@ -639,11 +676,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg,
   },
   writeBackBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  writeBackIcon: { fontSize: 20, color: Colors.textSub },
   writeTitle: { fontSize: 17, fontWeight: "500", color: Colors.text },
   writeSendText: { fontSize: 15, fontWeight: "500" },
   writeScroll: { flex: 1 },
-  writeScrollContent: { paddingHorizontal: 16, paddingBottom: 24 },
+  writeScrollContent: { paddingHorizontal: "5%", paddingBottom: 24 },
   writeTo: {
     backgroundColor: PAPER_BG,
     borderTopLeftRadius: 16,
@@ -651,14 +687,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
   },
   writePaper: {
     backgroundColor: PAPER_BG,
     position: "relative",
+    minHeight: 16 * LINE_H,
+    overflow: "hidden",
   },
   writeInput: {
+    flex: 1,
     fontSize: 15,
     color: Colors.text,
     lineHeight: LINE_H,
@@ -668,12 +705,13 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   writeCounter: {
-    position: "absolute",
-    bottom: 8,
-    right: LINE_MX + 4,
     fontSize: 11,
     color: Colors.textHint,
-    zIndex: 1,
+    alignSelf: "flex-end",
+    paddingHorizontal: LINE_MX + 4,
+    paddingTop: 4,
+    paddingBottom: 8,
+    backgroundColor: PAPER_BG,
   },
   writeFrom: {
     backgroundColor: PAPER_BG,
@@ -683,8 +721,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16,
     alignItems: "flex-end",
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
   },
 
   // ── Confirm modals ──
@@ -718,6 +754,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: Colors.accent,
     alignItems: "center",
+    justifyContent: "center",
   },
   confirmBtnText: { fontSize: 14, color: Colors.white, fontWeight: "500" },
   confirmBtnOutline: {
