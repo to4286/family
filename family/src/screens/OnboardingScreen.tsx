@@ -470,7 +470,7 @@ function FamilyTypeScreen({ onNext }: ScreenProps) {
                       styles.familyTypeText,
                       {
                         color: isLast && !customText ? Colors.textHint : Colors.text,
-                        fontWeight: isSelected ? "500" : "400",
+                        fontFamily: isSelected ? "Pretendard-Medium" : "Pretendard-Regular",
                       },
                     ]}
                   >
@@ -565,13 +565,14 @@ const styles = StyleSheet.create({
   },
   screenTitle: {
     fontSize: 22,
-    fontWeight: "500",
+    fontFamily: "Pretendard-Medium",
     color: Colors.text,
     lineHeight: 32,
     marginBottom: 8,
   },
   screenSubtitle: {
     fontSize: 14,
+    fontFamily: "Pretendard-Regular",
     color: Colors.textSub,
     lineHeight: 22,
     marginBottom: 32,
@@ -599,8 +600,8 @@ const styles = StyleSheet.create({
   },
   btnPrimaryText: {
     fontSize: 16,
+    fontFamily: "Pretendard-Medium",
     color: Colors.white,
-    fontWeight: "500",
   },
   btnGhost: {
     paddingVertical: 12,
@@ -609,6 +610,7 @@ const styles = StyleSheet.create({
   },
   btnGhostText: {
     fontSize: 14,
+    fontFamily: "Pretendard-Regular",
     color: Colors.textHint,
   },
 
@@ -647,13 +649,14 @@ const styles = StyleSheet.create({
   },
   loginTitle: {
     fontSize: 28,
-    fontWeight: "500",
+    fontFamily: "Pretendard-Medium",
     color: Colors.text,
     lineHeight: 40,
     marginBottom: 10,
   },
   loginSubtitle: {
     fontSize: 14,
+    fontFamily: "Pretendard-Regular",
     color: Colors.textSub,
     lineHeight: 24,
     marginBottom: 48,
@@ -674,8 +677,8 @@ const styles = StyleSheet.create({
   },
   googleBtnText: {
     fontSize: 15,
+    fontFamily: "Pretendard-Medium",
     color: Colors.text,
-    fontWeight: "500",
   },
   appleBtn: {
     flexDirection: "row",
@@ -688,8 +691,8 @@ const styles = StyleSheet.create({
   },
   appleBtnText: {
     fontSize: 15,
+    fontFamily: "Pretendard-Medium",
     color: Colors.white,
-    fontWeight: "500",
   },
   logoPlaceholder: {
     width: 18,
@@ -705,6 +708,7 @@ const styles = StyleSheet.create({
   },
   loginDisclaimer: {
     fontSize: 12,
+    fontFamily: "Pretendard-Regular",
     color: Colors.textHint,
     textAlign: "center",
   },
@@ -722,7 +726,7 @@ const styles = StyleSheet.create({
   },
   allCheckLabel: {
     fontSize: 15,
-    fontWeight: "500",
+    fontFamily: "Pretendard-Medium",
     color: Colors.text,
   },
   divider: {
@@ -740,10 +744,12 @@ const styles = StyleSheet.create({
   agreementLabel: {
     flex: 1,
     fontSize: 14,
+    fontFamily: "Pretendard-Regular",
     color: Colors.text,
   },
   agreementTag: {
     fontSize: 12,
+    fontFamily: "Pretendard-Regular",
     color: Colors.textHint,
   },
 
@@ -764,7 +770,7 @@ const styles = StyleSheet.create({
   },
   codeChar: {
     fontSize: 20,
-    fontWeight: "500",
+    fontFamily: "Pretendard-Medium",
     color: Colors.text,
   },
   hiddenInput: {
@@ -798,11 +804,12 @@ const styles = StyleSheet.create({
   },
   roleTitle: {
     fontSize: 15,
-    fontWeight: "500",
+    fontFamily: "Pretendard-Medium",
     color: Colors.text,
   },
   roleSub: {
     fontSize: 13,
+    fontFamily: "Pretendard-Regular",
     color: Colors.textHint,
   },
   radioBtn: {
@@ -820,10 +827,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     backgroundColor: Colors.bg,
     fontSize: 16,
+    fontFamily: "Pretendard-Regular",
     color: Colors.text,
   },
   inputCounter: {
     fontSize: 12,
+    fontFamily: "Pretendard-Regular",
     color: Colors.textHint,
     textAlign: "right",
     marginTop: 6,
@@ -865,6 +874,7 @@ const styles = StyleSheet.create({
   },
   photoHint: {
     fontSize: 13,
+    fontFamily: "Pretendard-Regular",
     color: Colors.textHint,
   },
 
@@ -879,6 +889,7 @@ const styles = StyleSheet.create({
   },
   familyTypeText: {
     fontSize: 15,
+    fontFamily: "Pretendard-Regular",
   },
   // textInput 스타일을 기반으로 카드 내부 padding 상쇄
   familyTypeCustomInput: {

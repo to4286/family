@@ -20,5 +20,6 @@ const styles = StyleSheet.create({
   text: {
     color: Colors.text,
     fontSize: 18,
+    fontFamily: "Pretendard-Regular",
   },
 });

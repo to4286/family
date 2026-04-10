@@ -12,6 +12,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../constants/colors";
 
+const sceneBg  = require("../assets/scenebg.png");
+const houseImg = require("../assets/house.png");
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Member = {
@@ -51,10 +54,10 @@ const MEMBERS: Member[] = [
 ];
 
 const MOODS = [
-  { icon: "🌟", label: "너무 행복해!" },
+  { icon: "🌞", label: "너무 행복해!" },
   { icon: "☀️",  label: "기분 좋아~"  },
-  { icon: "☁️", label: "그냥 그래"   },
-  { icon: "⛈️", label: "힘들어"      },
+  { icon: "⛅", label: "그냥 그래"   },
+  { icon: "🌧️", label: "힘들어"      },
 ];
 
 const TEMP_MESSAGES = [
@@ -79,16 +82,21 @@ const TEMP_ACTIONS = [
 // ─── Layout Constants ─────────────────────────────────────────────────────────
 
 const SCREEN_W = Dimensions.get("window").width;
-const ROOF_H   = Math.round(SCREEN_W / 3); // 3:1 비율
+const SCENE_H  = Dimensions.get("window").height;
+const HOUSE_W  = Math.round(SCREEN_W * 1.0);
+const HOUSE_H  = Math.round(HOUSE_W * 0.72);
 
 const CARD_H   = 150;
 const CARD_W   = 160;
 const CARD_GAP = 16;
 const TUBE_H   = 200;
 
-const PARENTS    = MEMBERS.filter((m) => m.isParent);
-const CHILDREN   = MEMBERS.filter((m) => !m.isParent);
-const CHILD_ROWS = chunkArray(CHILDREN, 2);
+const ME             = MEMBERS.filter((m) => m.isMine);
+const MOMS           = MEMBERS.filter((m) => m.isParent && m.emoji === "👩");
+const DADS           = MEMBERS.filter((m) => m.isParent && m.emoji === "👨");
+const CHILDREN       = MEMBERS.filter((m) => !m.isMine && !m.isParent);
+const SORTED_MEMBERS = [...ME, ...MOMS, ...DADS, ...CHILDREN];
+const ALL_ROWS       = chunkArray(SORTED_MEMBERS, 2);
 
 // ─── ThermoMini ───────────────────────────────────────────────────────────────
 
@@ -295,13 +303,18 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={{ height: insets.top, backgroundColor: Colors.white }} />
+      {/* 전체 배경 이미지 */}
+      <Image
+        source={sceneBg}
+        style={styles.fullBg}
+        resizeMode="cover"
+      />
 
-      {/* 헤더 */}
-      <View style={styles.header}>
+      {/* 헤더 (배경 위 absolute) */}
+      <View style={[styles.header, { top: insets.top }]}>
         <View style={styles.letterBadge}>
           <Text style={styles.letterBadgeIcon}>💌</Text>
-          <Text style={styles.letterBadgeText}>3</Text>
+          <Text style={styles.letterBadgeText}>3장</Text>
         </View>
         <View style={styles.notifBtn}>
           <Text style={styles.notifIcon}>🔔</Text>
@@ -309,43 +322,42 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* 지붕 이미지 — 헤더 아래 고정, 스크롤 밖 */}
-      <View style={styles.roofContainer}>
-        <Image
-          source={require("../assets/roof.png")}
-          style={styles.roofImage}
-          resizeMode="cover"
-        />
-      </View>
+      {/* 집 이미지 (배경 위 absolute, 언덕에 걸쳐서) */}
+      <Image
+        source={houseImg}
+        style={styles.houseImage}
+        resizeMode="contain"
+      />
 
-      {/* 가족 유형 라벨 */}
-      <View style={styles.familyLabel}>
-        <Text style={styles.familyLabelText}>대화가 많은 가족 🏡</Text>
-      </View>
-
-      {/* 구성원 카드 — ScrollView */}
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.cardRow}>
-          {PARENTS.map((m) => (
-            <MemberCard key={m.id} member={{ ...m, hasDot: dots[m.id] }} onPress={handleCardPress} />
-          ))}
+      {/* 반투명 카드 패널 */}
+      <View style={styles.contentPanel}>
+        {/* 가족 유형 텍스트 */}
+        <View style={styles.familyLabel}>
+          <Text style={styles.familyLabelText}>대화가 많은 가족 🏡</Text>
         </View>
-        {CHILD_ROWS.map((row, i) => (
-          <View key={i} style={styles.cardRow}>
-            {row.map((m) => (
-              <MemberCard key={m.id} member={{ ...m, hasDot: dots[m.id] }} onPress={handleCardPress} />
-            ))}
-          </View>
-        ))}
-        <View style={{ height: 24 }} />
-      </ScrollView>
+
+        {/* 구성원 카드 ScrollView */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {ALL_ROWS.map((row, i) => (
+            <View key={i} style={styles.cardRow}>
+              {row.map((m) => (
+                <MemberCard key={m.id} member={{ ...m, hasDot: dots[m.id] }} onPress={handleCardPress} />
+              ))}
+            </View>
+          ))}
+        </ScrollView>
+      </View>
 
       {/* 온도 띠 */}
-      <TouchableOpacity onPress={() => setShowTempModal(true)} activeOpacity={0.9} style={styles.tempStrip}>
+      <TouchableOpacity
+        onPress={() => setShowTempModal(true)}
+        activeOpacity={0.9}
+        style={styles.tempStrip}
+      >
         <View style={styles.tempStripInner}>
           <ThermoMini percent={temperature} />
           <Text style={styles.tempValue}>{temperature}°</Text>
@@ -363,44 +375,111 @@ export default function HomeScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg },
+  root: {
+    flex: 1,
+    backgroundColor: "#F9C47A",
+  },
 
-  // 헤더
-  header: { height: 56, paddingHorizontal: 28, flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: Colors.white },
-  letterBadge: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: Colors.surface, borderRadius: 24, paddingVertical: 8, paddingHorizontal: 16 },
-  letterBadgeIcon: { fontSize: 20 },
-  letterBadgeText: { fontSize: 16, fontWeight: "500", color: Colors.text },
-  notifBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center" },
-  notifIcon: { fontSize: 22 },
+  fullBg: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+  },
+
+  // 헤더 (배경 위 absolute)
+  header: {
+    position: "absolute",
+    left: 0, right: 0,
+    zIndex: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "transparent",
+  },
+  houseImage: {
+    position: "absolute",
+    width: HOUSE_W,
+    height: HOUSE_H,
+    left: (SCREEN_W - HOUSE_W) / 2,
+    top: SCENE_H * 0.12,
+    zIndex: 2,
+  },
+
+  // 반투명 카드 패널
+  contentPanel: {
+    position: "absolute",
+    bottom: 96,
+    left: 16,
+    right: 16,
+    backgroundColor: "rgba(255,252,248,0.92)",
+    borderRadius: 24,
+    paddingTop: 16,
+    paddingBottom: 8,
+    height: SCENE_H * 0.40,
+    zIndex: 5,
+  },
+
+  letterBadge: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: "rgba(255,255,255,0.82)", borderRadius: 24, paddingVertical: 8, paddingHorizontal: 16 },
+  letterBadgeIcon: { fontSize: 18, fontFamily: "Pretendard-Regular" },
+  letterBadgeText: { fontSize: 15, fontFamily: "Pretendard-Medium", color: Colors.accent },
+  notifBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: "rgba(255,255,255,0.82)", alignItems: "center", justifyContent: "center" },
+  notifIcon: { fontSize: 22, fontFamily: "Pretendard-Regular" },
   notifDot: { position: "absolute", top: 8, right: 8, width: 11, height: 11, borderRadius: 5.5, backgroundColor: Colors.accent, borderWidth: 2, borderColor: Colors.white },
 
-  // 지붕 이미지
-  roofContainer: { backgroundColor: Colors.white, overflow: "hidden" },
-  roofImage: { width: "100%", height: ROOF_H },
-
-  // 가족 유형 라벨 — 이미지와 12px 여백
-  familyLabel: { marginTop: 12, paddingBottom: 14, alignItems: "center", backgroundColor: Colors.bg },
-  familyLabelText: { fontSize: 20, fontWeight: "500", color: Colors.textSub },
+  // 가족 유형 라벨
+  familyLabel: { alignItems: "center", paddingBottom: 12 },
+  familyLabelText: { fontSize: 17, fontFamily: "Pretendard-Medium", color: Colors.textSub },
 
   // 구성원 ScrollView
-  scrollView: { flex: 1, backgroundColor: Colors.bg },
-  scrollContent: { gap: CARD_GAP, paddingHorizontal: 24, paddingBottom: 8 },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    gap: CARD_GAP,
+    paddingHorizontal: 16,
+    paddingBottom: CARD_H * 0.35,
+  },
   cardRow: { flexDirection: "row", gap: 14, justifyContent: "center" },
 
   // 구성원 카드
   memberCard: { width: CARD_W, height: CARD_H, backgroundColor: "rgba(255,255,255,0.95)", borderWidth: 1, borderColor: Colors.border, borderRadius: 24, paddingVertical: 16, paddingHorizontal: 12, alignItems: "center", gap: 8 },
   memberAvatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center" },
-  memberEmoji: { fontSize: 32 },
+  memberEmoji: { fontSize: 32, fontFamily: "Pretendard-Regular" },
   memberDot: { position: "absolute", top: 2, right: 2, width: 13, height: 13, borderRadius: 6.5, backgroundColor: Colors.accent, borderWidth: 2, borderColor: Colors.white },
-  memberNickname: { fontSize: 15, fontWeight: "500", color: Colors.text },
-  memberRole: { fontSize: 12, color: Colors.textHint, textAlign: "center", lineHeight: 17 },
+  memberNickname: { fontSize: 15, fontFamily: "Pretendard-Medium", color: Colors.text },
+  memberRole: { fontSize: 12, fontFamily: "Pretendard-Regular", color: Colors.textHint, textAlign: "center", lineHeight: 17 },
 
   // 온도 띠
-  tempStrip: { height: 96, backgroundColor: Colors.bg, paddingVertical: 14, paddingHorizontal: 24 },
-  tempStripInner: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: Colors.surface, borderRadius: 18, paddingVertical: 13, paddingHorizontal: 18 },
-  tempValue: { fontSize: 22, fontWeight: "500", color: Colors.accent },
+  tempStrip: {
+    position: "absolute",
+    bottom: 8,
+    left: 16,
+    right: 16,
+    height: 80,
+    paddingBottom: 4,
+    paddingTop: 0,
+    backgroundColor: "transparent",
+    zIndex: 5,
+  },
+  tempStripInner: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "rgba(255,252,248,0.92)",
+    borderRadius: 18,
+    paddingVertical: 13,
+    paddingHorizontal: 18,
+  },
+  tempValue: { fontSize: 22, fontFamily: "Pretendard-Medium", color: Colors.accent },
   tempDivider: { width: 1, height: 26, backgroundColor: "#E8C8A8" },
-  tempMessage: { flex: 1, fontSize: 12, color: Colors.textSub, lineHeight: 19 },
+  tempMessage: { flex: 1, fontSize: 12, fontFamily: "Pretendard-Regular", color: Colors.textSub, lineHeight: 19 },
 
   // ThermoMini
   thermoMini: { alignItems: "center", gap: 2 },
@@ -412,40 +491,40 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: "rgba(46,34,22,0.5)", alignItems: "center", justifyContent: "center" },
   modalCloseRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 4 },
   modalCloseBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center" },
-  modalCloseText: { fontSize: 14, color: Colors.textSub },
+  modalCloseText: { fontSize: 14, fontFamily: "Pretendard-Regular", color: Colors.textSub },
   divider: { height: 1, backgroundColor: Colors.border, marginBottom: 20 },
 
   // 구성원 모달
   memberModalCard: { width: 320, backgroundColor: Colors.white, borderRadius: 28, padding: 24, paddingTop: 28, shadowColor: "#2E2216", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20, elevation: 12 },
   modalProfile: { alignItems: "center", gap: 10, marginBottom: 24 },
   modalAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center" },
-  modalAvatarEmoji: { fontSize: 40 },
-  modalNickname: { fontSize: 17, fontWeight: "500", color: Colors.text },
-  modalRole: { fontSize: 13, color: Colors.textHint },
+  modalAvatarEmoji: { fontSize: 40, fontFamily: "Pretendard-Regular" },
+  modalNickname: { fontSize: 17, fontFamily: "Pretendard-Medium", color: Colors.text },
+  modalRole: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.textHint },
   modalMoodSection: { marginBottom: 24 },
-  modalMoodTitle: { fontSize: 12, color: Colors.textSub, marginBottom: 14, textAlign: "center" },
+  modalMoodTitle: { fontSize: 12, fontFamily: "Pretendard-Regular", color: Colors.textSub, marginBottom: 14, textAlign: "center" },
   moodRow: { flexDirection: "row", justifyContent: "space-around" },
   moodItem: { alignItems: "center", gap: 6 },
   moodCircle: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
   moodCircleLarge: { width: 64, height: 64, borderRadius: 32 },
-  moodEmoji: { fontSize: 22 },
-  moodEmojiLarge: { fontSize: 30 },
-  moodLabel: { fontSize: 10, textAlign: "center", lineHeight: 14 },
+  moodEmoji: { fontSize: 22, fontFamily: "Pretendard-Regular" },
+  moodEmojiLarge: { fontSize: 30, fontFamily: "Pretendard-Regular" },
+  moodLabel: { fontSize: 10, fontFamily: "Pretendard-Regular", textAlign: "center", lineHeight: 14 },
   moodDisplay: { alignItems: "center", gap: 8 },
-  moodDisplayLabel: { fontSize: 13, color: Colors.textSub },
+  moodDisplayLabel: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.textSub },
   btnSave: { paddingVertical: 13, borderRadius: 16, backgroundColor: Colors.accent, alignItems: "center", justifyContent: "center" },
-  btnSaveText: { fontSize: 14, color: Colors.white, fontWeight: "500" },
+  btnSaveText: { fontSize: 14, fontFamily: "Pretendard-Medium", color: Colors.white },
   btnRow: { flexDirection: "row", gap: 10 },
   btnOutline: { paddingVertical: 13, borderRadius: 16, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center" },
-  btnOutlineText: { fontSize: 13, color: Colors.text, fontWeight: "500" },
+  btnOutlineText: { fontSize: 13, fontFamily: "Pretendard-Medium", color: Colors.text },
   btnFilled: { paddingVertical: 13, borderRadius: 16, backgroundColor: Colors.accent, alignItems: "center", justifyContent: "center" },
-  btnFilledText: { fontSize: 13, color: Colors.white, fontWeight: "500" },
+  btnFilledText: { fontSize: 13, fontFamily: "Pretendard-Medium", color: Colors.white },
 
   // 온도 모달
   tempModalCard: { width: 300, backgroundColor: Colors.white, borderRadius: 28, padding: 22, paddingTop: 24, shadowColor: "#2E2216", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20, elevation: 12 },
   thermometerRow: { flexDirection: "row", justifyContent: "center", alignItems: "flex-start", marginBottom: 28 },
   thermometerLeft: { width: 60, height: TUBE_H + 36, alignItems: "flex-end", paddingRight: 8 },
-  tempLabelText: { fontSize: 22, fontWeight: "500", color: Colors.accent },
+  tempLabelText: { fontSize: 22, fontFamily: "Pretendard-Medium", color: Colors.accent },
   thermometerCenter: { alignItems: "center" },
   thermometerTube: { width: 28, height: TUBE_H, borderWidth: 2, borderColor: "#F0D9C4", borderTopLeftRadius: 14, borderTopRightRadius: 14, backgroundColor: Colors.white, overflow: "hidden" },
   tubeMarkerLine: { position: "absolute", left: 0, right: 0, height: 1.5, backgroundColor: "rgba(180,140,110,0.5)", zIndex: 1 },
@@ -453,15 +532,15 @@ const styles = StyleSheet.create({
   thermometerBulb: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.accent, borderWidth: 2, borderColor: "#F0C9A0", marginTop: -1 },
   thermometerRight: { width: 110, height: TUBE_H + 36, position: "relative", paddingLeft: 10 },
   rewardMarker: { flexDirection: "row", alignItems: "center", gap: 6 },
-  rewardTemp: { fontSize: 12, fontWeight: "500", color: Colors.text },
+  rewardTemp: { fontSize: 12, fontFamily: "Pretendard-Medium", color: Colors.text },
   rewardBadge: { backgroundColor: Colors.accentLight, borderWidth: 1, borderColor: Colors.accent, borderRadius: 20, paddingVertical: 2, paddingHorizontal: 8 },
-  rewardBadgeText: { fontSize: 11, fontWeight: "500", color: Colors.accent },
+  rewardBadgeText: { fontSize: 11, fontFamily: "Pretendard-Medium", color: Colors.accent },
   repeatReward: { backgroundColor: Colors.surface, borderRadius: 14, padding: 11, paddingHorizontal: 14, marginBottom: 14 },
-  repeatRewardTitle: { fontSize: 11, fontWeight: "500", color: Colors.text, marginBottom: 4 },
-  repeatRewardDesc: { fontSize: 11, color: Colors.textSub, lineHeight: 18 },
+  repeatRewardTitle: { fontSize: 11, fontFamily: "Pretendard-Medium", color: Colors.text, marginBottom: 4 },
+  repeatRewardDesc: { fontSize: 11, fontFamily: "Pretendard-Regular", color: Colors.textSub, lineHeight: 18 },
   tempActionSection: { marginBottom: 14 },
-  tempSectionTitle: { fontSize: 11, fontWeight: "500", color: Colors.text, marginBottom: 8 },
+  tempSectionTitle: { fontSize: 11, fontFamily: "Pretendard-Medium", color: Colors.text, marginBottom: 8 },
   tempActionRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 7 },
-  tempActionLabel: { fontSize: 11, color: Colors.textSub },
-  tempActionVal: { fontSize: 11, fontWeight: "500", color: Colors.accent },
+  tempActionLabel: { fontSize: 11, fontFamily: "Pretendard-Regular", color: Colors.textSub },
+  tempActionVal: { fontSize: 11, fontFamily: "Pretendard-Medium", color: Colors.accent },
 });

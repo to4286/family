@@ -527,14 +527,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
   },
-  headerTitle: { fontSize: 18, fontWeight: "500", color: Colors.text },
+  headerTitle: { fontSize: 18, fontFamily: "Pretendard-Medium", color: Colors.text },
 
   // ── List ──
   list: { flex: 1, backgroundColor: Colors.white },
   listContent: { padding: 20, gap: 16, paddingBottom: 32 },
   emptyState: { alignItems: "center", justifyContent: "center", gap: 12, paddingVertical: 80 },
-  emptyIcon: { fontSize: 40 },
-  emptyText: { fontSize: 14, color: Colors.textHint },
+  emptyIcon: { fontSize: 40, fontFamily: "Pretendard-Regular" },
+  emptyText: { fontSize: 14, fontFamily: "Pretendard-Regular", color: Colors.textHint },
 
   // ── Envelope card ──
   envelopeWrapper: { position: "relative" },
@@ -555,17 +555,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   envelopeFrom: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
-  envelopeFromLabel: { fontSize: 13, color: Colors.textHint },
-  envelopeFromName: { fontSize: 16, fontWeight: "500", color: Colors.text, marginBottom: 3 },
-  envelopeFromRole: { fontSize: 13, color: Colors.textHint },
+  envelopeFromLabel: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.textHint },
+  envelopeFromName: { fontSize: 16, fontFamily: "Pretendard-Medium", color: Colors.text, marginBottom: 3 },
+  envelopeFromRole: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.textHint },
   envelopeDateBadge: {
     borderWidth: 1,
     borderRadius: 6,
     paddingVertical: 4,
     paddingHorizontal: 10,
   },
-  envelopeDateText: { fontSize: 12, fontWeight: "500" },
-  envelopePreview: { fontSize: 15, color: Colors.textSub, lineHeight: 25 },
+  envelopeDateText: { fontSize: 12, fontFamily: "Pretendard-Medium" },
+  envelopePreview: { fontSize: 15, fontFamily: "Pretendard-Regular", color: Colors.textSub, lineHeight: 25 },
   unreadDot: {
     position: "absolute",
     top: -4,
@@ -588,9 +588,9 @@ const styles = StyleSheet.create({
   },
 
   // ── Addr block ──
-  addrLabel: { fontSize: 12, color: Colors.textHint, marginBottom: 4 },
-  addrName:  { fontSize: 15, fontWeight: "500", color: Colors.text, marginBottom: 4 },
-  addrRole:  { fontSize: 12, color: Colors.textSub },
+  addrLabel: { fontSize: 12, fontFamily: "Pretendard-Regular", color: Colors.textHint, marginBottom: 4 },
+  addrName:  { fontSize: 15, fontFamily: "Pretendard-Medium", color: Colors.text, marginBottom: 4 },
+  addrRole:  { fontSize: 12, fontFamily: "Pretendard-Regular", color: Colors.textSub },
   addrRight: { alignItems: "flex-end" },
   writeAddrRow: { flexDirection: "row", alignItems: "flex-end", gap: 6 },
   writeAddrNameWrap: {
@@ -603,6 +603,7 @@ const styles = StyleSheet.create({
   // ── Letter content (read) ──
   letterContent: {
     fontSize: 15,
+    fontFamily: "Pretendard-Regular",
     color: Colors.text,
     lineHeight: LINE_H,
     paddingHorizontal: LINE_MX + 4,
@@ -644,7 +645,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  detailCloseIcon: { fontSize: 18, color: Colors.textSub },
+  detailCloseIcon: { fontSize: 18, fontFamily: "Pretendard-Regular", color: Colors.textSub },
   detailScroll: { flex: 1, backgroundColor: PAPER_BG },
   detailToSection: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
   detailBody: { position: "relative", paddingBottom: LINE_H },
@@ -662,7 +663,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  btnReplyText: { fontSize: 15, color: Colors.white, fontWeight: "500" },
+  btnReplyText: { fontSize: 15, fontFamily: "Pretendard-Medium", color: Colors.white },
 
   // ── Write screen ──
   writeRoot: { flex: 1, backgroundColor: Colors.bg },
@@ -676,8 +677,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bg,
   },
   writeBackBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  writeTitle: { fontSize: 17, fontWeight: "500", color: Colors.text },
-  writeSendText: { fontSize: 15, fontWeight: "500" },
+  writeTitle: { fontSize: 17, fontFamily: "Pretendard-Medium", color: Colors.text },
+  writeSendText: { fontSize: 15, fontFamily: "Pretendard-Medium" },
   writeScroll: { flex: 1 },
   writeScrollContent: { paddingHorizontal: "5%", paddingBottom: 24 },
   writeTo: {
@@ -697,6 +698,7 @@ const styles = StyleSheet.create({
   writeInput: {
     flex: 1,
     fontSize: 15,
+    fontFamily: "Pretendard-Regular",
     color: Colors.text,
     lineHeight: LINE_H,
     paddingHorizontal: LINE_MX + 4,
@@ -706,6 +708,7 @@ const styles = StyleSheet.create({
   },
   writeCounter: {
     fontSize: 11,
+    fontFamily: "Pretendard-Regular",
     color: Colors.textHint,
     alignSelf: "flex-end",
     paddingHorizontal: LINE_MX + 4,
@@ -735,13 +738,14 @@ const styles = StyleSheet.create({
   confirmIcon: { fontSize: 40, marginBottom: 12 },
   confirmTitle: {
     fontSize: 17,
-    fontWeight: "500",
+    fontFamily: "Pretendard-Medium",
     color: Colors.text,
     marginBottom: 8,
     textAlign: "center",
   },
   confirmDesc: {
     fontSize: 14,
+    fontFamily: "Pretendard-Regular",
     color: Colors.textSub,
     lineHeight: 24,
     marginBottom: 24,
@@ -756,7 +760,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  confirmBtnText: { fontSize: 14, color: Colors.white, fontWeight: "500" },
+  confirmBtnText: { fontSize: 14, fontFamily: "Pretendard-Medium", color: Colors.white },
   confirmBtnOutline: {
     flex: 1,
     paddingVertical: 13,
@@ -765,5 +769,5 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
     alignItems: "center",
   },
-  confirmBtnOutlineText: { fontSize: 14, color: Colors.text },
+  confirmBtnOutlineText: { fontSize: 14, fontFamily: "Pretendard-Regular", color: Colors.text },
 });

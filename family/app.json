@@ -25,6 +25,14 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "fonts": [
+      "./src/assets/fonts/Pretendard-Regular.otf",
+      "./src/assets/fonts/Pretendard-Medium.otf",
+      "./src/assets/fonts/Pretendard-Bold.otf"
+    ],
+    "plugins": [
+      "expo-font"
+    ]
   }
 }
