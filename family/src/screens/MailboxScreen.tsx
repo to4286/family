@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   KeyboardAvoidingView,
   Modal,
@@ -264,8 +265,14 @@ function WriteScreen({
       <View style={[styles.writeRoot, { paddingTop: insets.top }]}>
         {/* 헤더 */}
         <View style={styles.writeHeader}>
-          <TouchableOpacity onPress={handleBack} style={styles.writeBackBtn}>
-            <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+          <Pressable
+            onPress={handleBack}
+            style={({ pressed }) => [
+              styles.writeBackBtn,
+              pressed && { opacity: 0.6 },
+            ]}
+          >
+            <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
               <Path
                 d="M15 18l-6-6 6-6"
                 stroke={Colors.textSub}
@@ -274,7 +281,7 @@ function WriteScreen({
                 strokeLinejoin="round"
               />
             </Svg>
-          </TouchableOpacity>
+          </Pressable>
           <Text style={styles.writeTitle}>편지 쓰기</Text>
           <TouchableOpacity onPress={canSend ? () => setShowSentModal(true) : undefined}>
             <Text
@@ -676,7 +683,13 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     backgroundColor: Colors.bg,
   },
-  writeBackBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  writeBackBtn: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: -8,
+  },
   writeTitle: { fontSize: 17, fontFamily: "Pretendard-Medium", color: Colors.text },
   writeSendText: { fontSize: 15, fontFamily: "Pretendard-Medium" },
   writeScroll: { flex: 1 },

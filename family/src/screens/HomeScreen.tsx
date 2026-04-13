@@ -1,13 +1,24 @@
+import { useNavigation } from "@react-navigation/native";
+import type { CompositeNavigationProp } from "@react-navigation/native";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import Svg, { Path } from "react-native-svg";
+import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
 import React, { useState, useRef } from "react";
 import {
   View,
   Text,
   Image,
+  TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Keyboard,
   ScrollView,
   StyleSheet,
   Modal,
   Dimensions,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../constants/colors";
@@ -16,6 +27,11 @@ const sceneBg  = require("../assets/scenebg.png");
 const houseImg = require("../assets/house.png");
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+type HomeScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, "Home">,
+  NativeStackNavigationProp<MainTabStackParamList>
+>;
 
 type Member = {
   id: number;
@@ -26,6 +42,7 @@ type Member = {
   isMine: boolean;
   isParent: boolean;
   currentMood: number;
+  message?: string;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -46,18 +63,18 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 // ─── Static Data ──────────────────────────────────────────────────────────────
 
 const MEMBERS: Member[] = [
-  { id: 1, emoji: "👨", nickname: "김철수", role: "든든한 버팀목", hasDot: true,  isMine: false, isParent: true,  currentMood: 1 },
-  { id: 2, emoji: "👩", nickname: "이영희", role: "따뜻한 햇살",   hasDot: false, isMine: false, isParent: true,  currentMood: 0 },
-  { id: 3, emoji: "🧒", nickname: "민준",   role: "복덩이 자녀",  hasDot: true,  isMine: true,  isParent: false, currentMood: 2 },
-  { id: 4, emoji: "👦", nickname: "지수",   role: "복덩이 자녀",  hasDot: false, isMine: false, isParent: false, currentMood: 2 },
-  { id: 5, emoji: "👧", nickname: "하은",   role: "복덩이 자녀",  hasDot: true,  isMine: false, isParent: false, currentMood: 3 },
+  { id: 1, emoji: "👨", nickname: "김철수", role: "든든한 버팀목", hasDot: true,  isMine: false, isParent: true,  currentMood: 1, message: "오늘 퇴근 늦을 것 같아" },
+  { id: 2, emoji: "👩", nickname: "이영희", role: "따뜻한 햇살",   hasDot: false, isMine: false, isParent: true,  currentMood: 0, message: "" },
+  { id: 3, emoji: "🧒", nickname: "민준",   role: "복덩이 자녀",  hasDot: true,  isMine: true,  isParent: false, currentMood: 2, message: "" },
+  { id: 4, emoji: "👦", nickname: "지수",   role: "복덩이 자녀",  hasDot: false, isMine: false, isParent: false, currentMood: 2, message: "주말에 뭐해?" },
+  { id: 5, emoji: "👧", nickname: "하은",   role: "복덩이 자녀",  hasDot: true,  isMine: false, isParent: false, currentMood: 3, message: "" },
 ];
 
 const MOODS = [
-  { icon: "🌞", label: "너무 행복해!" },
+  { icon: "🌟", label: "너무 행복해!" },
   { icon: "☀️",  label: "기분 좋아~"  },
-  { icon: "⛅", label: "그냥 그래"   },
-  { icon: "🌧️", label: "힘들어"      },
+  { icon: "☁️", label: "그냥 그래"   },
+  { icon: "⛈️", label: "힘들어"      },
 ];
 
 const TEMP_MESSAGES = [
@@ -117,12 +134,30 @@ function ThermoMini({ percent }: { percent: number }) {
 function MemberCard({ member, onPress }: { member: Member; onPress: (m: Member) => void }) {
   return (
     <TouchableOpacity onPress={() => onPress(member)} activeOpacity={0.85} style={styles.memberCard}>
-      <View style={styles.memberAvatar}>
-        <Text style={styles.memberEmoji}>{member.emoji}</Text>
-        {member.hasDot && <View style={styles.memberDot} />}
+      <View style={{ width: "100%", alignItems: "center", position: "relative", height: 100 }}>
+        <View style={[styles.memberAvatar, { position: "absolute", bottom: 8, zIndex: 1 }]}>
+          <Text style={styles.memberEmoji}>{member.emoji}</Text>
+          {member.hasDot && <View style={styles.memberDot} />}
+        </View>
+        <View style={styles.bubbleWrapper}>
+          <View style={styles.bubbleBody}>
+            {member.message ? (
+              <Text style={styles.bubbleText} numberOfLines={1}>
+                {member.message.length > 12
+                  ? member.message.slice(0, 12) + "..."
+                  : member.message}
+              </Text>
+            ) : (
+              <Text style={[styles.bubbleText, { color: Colors.textSub }]} numberOfLines={1}>
+                {member.isMine ? "내 상황을 공유해봐요" : "무엇을 하고 있을까요?"}
+              </Text>
+            )}
+          </View>
+          <View style={styles.bubbleTailOuter} />
+          <View style={styles.bubbleTailInner} />
+        </View>
       </View>
       <Text style={styles.memberNickname}>{member.nickname}</Text>
-      <Text style={styles.memberRole}>{member.role}</Text>
     </TouchableOpacity>
   );
 }
@@ -131,6 +166,7 @@ function MemberCard({ member, onPress }: { member: Member; onPress: (m: Member) 
 
 function MemberModal({ member, onClose }: { member: Member | null; onClose: () => void }) {
   const [selectedMood, setSelectedMood] = useState(2);
+  const [message, setMessage] = useState("");
   // fade-out 애니메이션 중 member가 null이 되어도 마지막 데이터 유지
   const lastMember = useRef<Member | null>(null);
   if (member) lastMember.current = member;
@@ -138,7 +174,9 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
 
   return (
     <Modal visible={!!member} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.modalOverlay} onPress={onClose} activeOpacity={1}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
         <TouchableOpacity activeOpacity={1} style={styles.memberModalCard}>
           <View style={styles.modalCloseRow}>
             <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
@@ -154,36 +192,53 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
             <Text style={styles.modalRole}>{m?.role}</Text>
           </View>
 
-          <View style={styles.divider} />
+          {!m?.isMine && !!m?.message && (
+            <View style={styles.modalMessageBubble}>
+              <Text style={styles.modalMessageBubbleText}>{`💬 ${m.message}`}</Text>
+            </View>
+          )}
 
           <View style={styles.modalMoodSection}>
-            <Text style={styles.modalMoodTitle}>
-              {m?.isMine ? "오늘 기분이 어때요?" : `${m?.nickname}의 기분`}
-            </Text>
             {m?.isMine ? (
-              <View style={styles.moodRow}>
-                {MOODS.map((mood, i) => (
-                  <TouchableOpacity key={i} onPress={() => setSelectedMood(i)} style={styles.moodItem}>
-                    <View style={[styles.moodCircle, { backgroundColor: selectedMood === i ? Colors.accentLight : Colors.surface, borderColor: selectedMood === i ? Colors.accent : Colors.border, borderWidth: selectedMood === i ? 2 : 1.5 }]}>
-                      <Text style={styles.moodEmoji}>{mood.icon}</Text>
-                    </View>
-                    <Text style={[styles.moodLabel, { color: selectedMood === i ? Colors.accent : Colors.textHint }]}>{mood.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : (
-              <View style={styles.moodDisplay}>
-                <View style={[styles.moodCircle, styles.moodCircleLarge, { backgroundColor: Colors.accentLight, borderColor: Colors.accent, borderWidth: 2 }]}>
-                  <Text style={styles.moodEmojiLarge}>{MOODS[m?.currentMood ?? 0].icon}</Text>
+              <>
+                <Text style={styles.modalMoodTitle}>오늘 기분이 어때요?</Text>
+                <View style={styles.moodRow}>
+                  {MOODS.map((mood, i) => (
+                    <TouchableOpacity key={i} onPress={() => setSelectedMood(i)} style={styles.moodItem}>
+                      <View style={[styles.moodCircle, { backgroundColor: selectedMood === i ? Colors.accentLight : Colors.surface, borderColor: selectedMood === i ? Colors.accent : Colors.border, borderWidth: selectedMood === i ? 2 : 1.5 }]}>
+                        <Text style={styles.moodEmoji}>{mood.icon}</Text>
+                      </View>
+                      <Text style={[styles.moodLabel, { color: selectedMood === i ? Colors.accent : Colors.textHint }]}>{mood.label}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-                <Text style={styles.moodDisplayLabel}>{MOODS[m?.currentMood ?? 0].label}</Text>
-              </View>
+                <View style={{ height: 24 }} />
+                <Text style={styles.modalMessageTitle}>무슨 생각을 하고 있나요?</Text>
+                <TextInput
+                  value={message}
+                  onChangeText={setMessage}
+                  placeholder="말풍선에 표시돼요"
+                  maxLength={30}
+                  style={styles.modalMessageInput}
+                />
+                <Text style={styles.modalMessageHint}>24시간 후 자동으로 사라져요</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalMoodTitle}>{m?.nickname}의 기분</Text>
+                <View style={styles.moodDisplay}>
+                  <View style={[styles.moodCircle, styles.moodCircleLarge, { backgroundColor: Colors.accentLight, borderColor: Colors.accent, borderWidth: 2 }]}>
+                    <Text style={styles.moodEmojiLarge}>{MOODS[m?.currentMood ?? 0].icon}</Text>
+                  </View>
+                  <Text style={styles.moodDisplayLabel}>{MOODS[m?.currentMood ?? 0].label}</Text>
+                </View>
+              </>
             )}
           </View>
 
           {m?.isMine ? (
             <TouchableOpacity onPress={onClose} style={styles.btnSave}>
-              <Text style={styles.btnSaveText}>기분 저장하기</Text>
+              <Text style={styles.btnSaveText}>저장하기</Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.btnRow}>
@@ -196,7 +251,9 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
             </View>
           )}
         </TouchableOpacity>
-      </TouchableOpacity>
+          </View>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -281,6 +338,7 @@ function TempModal({ temperature, onClose }: { temperature: number; onClose: () 
 // ─── HomeScreen ───────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
+  const navigation = useNavigation<HomeScreenNavigationProp>();
   const insets = useSafeAreaInsets();
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [showTempModal, setShowTempModal]   = useState(false);
@@ -316,10 +374,19 @@ export default function HomeScreen() {
           <Text style={styles.letterBadgeIcon}>💌</Text>
           <Text style={styles.letterBadgeText}>3장</Text>
         </View>
-        <View style={styles.notifBtn}>
-          <Text style={styles.notifIcon}>🔔</Text>
+        <TouchableOpacity
+          style={styles.notifBtn}
+          onPress={() => navigation.navigate("Notifications")}
+          activeOpacity={0.85}
+        >
+          <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+            <Path
+              d="M8.35206 20.242C8.78721 20.7922 9.34171 21.2364 9.97367 21.541C10.6056 21.8455 11.2985 22.0025 12.0001 22C12.7016 22.0025 13.3945 21.8455 14.0264 21.541C14.6584 21.2364 15.2129 20.7922 15.6481 20.242C13.2271 20.5697 10.773 20.5697 8.35206 20.242ZM18.7501 9V9.704C18.7501 10.549 18.9901 11.375 19.4421 12.078L20.5501 13.801C21.5611 15.375 20.7891 17.514 19.0301 18.011C14.4338 19.3127 9.56635 19.3127 4.97006 18.011C3.21106 17.514 2.43906 15.375 3.45006 13.801L4.55806 12.078C5.01127 11.3692 5.25178 10.5453 5.25106 9.704V9C5.25106 5.134 8.27306 2 12.0001 2C15.7271 2 18.7501 5.134 18.7501 9Z"
+              fill={Colors.accent}
+            />
+          </Svg>
           <View style={styles.notifDot} />
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* 집 이미지 (배경 위 absolute, 언덕에 걸쳐서) */}
@@ -415,8 +482,8 @@ const styles = StyleSheet.create({
   contentPanel: {
     position: "absolute",
     bottom: 96,
-    left: 16,
-    right: 16,
+    left: 24,
+    right: 24,
     backgroundColor: "rgba(255,252,248,0.92)",
     borderRadius: 24,
     paddingTop: 16,
@@ -442,25 +509,29 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     gap: CARD_GAP,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingBottom: CARD_H * 0.35,
   },
   cardRow: { flexDirection: "row", gap: 14, justifyContent: "center" },
 
   // 구성원 카드
-  memberCard: { width: CARD_W, height: CARD_H, backgroundColor: "rgba(255,255,255,0.95)", borderWidth: 1, borderColor: Colors.border, borderRadius: 24, paddingVertical: 16, paddingHorizontal: 12, alignItems: "center", gap: 8 },
+  memberCard: { width: CARD_W, height: CARD_H, backgroundColor: "rgba(255,255,255,0.95)", borderWidth: 1, borderColor: Colors.border, borderRadius: 24, paddingVertical: 16, paddingHorizontal: 12, alignItems: "center", gap: 4 },
   memberAvatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center" },
   memberEmoji: { fontSize: 32, fontFamily: "Pretendard-Regular" },
   memberDot: { position: "absolute", top: 2, right: 2, width: 13, height: 13, borderRadius: 6.5, backgroundColor: Colors.accent, borderWidth: 2, borderColor: Colors.white },
   memberNickname: { fontSize: 15, fontFamily: "Pretendard-Medium", color: Colors.text },
-  memberRole: { fontSize: 12, fontFamily: "Pretendard-Regular", color: Colors.textHint, textAlign: "center", lineHeight: 17 },
+  bubbleWrapper: { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10, alignItems: "center" },
+  bubbleBody: { backgroundColor: "rgba(255,255,255,0.95)", borderRadius: 14, borderWidth: 1.2, borderColor: Colors.border, paddingVertical: 5, paddingHorizontal: 10, maxWidth: 130 },
+  bubbleText: { fontSize: 12, fontFamily: "Pretendard-Regular", color: Colors.text, lineHeight: 16 },
+  bubbleTailOuter: { width: 0, height: 0, borderLeftWidth: 5, borderRightWidth: 5, borderTopWidth: 7, borderLeftColor: "transparent", borderRightColor: "transparent", borderTopColor: Colors.border, alignSelf: "flex-start", marginLeft: 44 },
+  bubbleTailInner: { width: 0, height: 0, borderLeftWidth: 4, borderRightWidth: 4, borderTopWidth: 6, borderLeftColor: "transparent", borderRightColor: "transparent", borderTopColor: "rgba(255,255,255,0.95)", alignSelf: "flex-start", marginLeft: 45, marginTop: -8 },
 
   // 온도 띠
   tempStrip: {
     position: "absolute",
     bottom: 8,
-    left: 16,
-    right: 16,
+    left: 24,
+    right: 24,
     height: 80,
     paddingBottom: 4,
     paddingTop: 0,
@@ -502,7 +573,7 @@ const styles = StyleSheet.create({
   modalNickname: { fontSize: 17, fontFamily: "Pretendard-Medium", color: Colors.text },
   modalRole: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.textHint },
   modalMoodSection: { marginBottom: 24 },
-  modalMoodTitle: { fontSize: 12, fontFamily: "Pretendard-Regular", color: Colors.textSub, marginBottom: 14, textAlign: "center" },
+  modalMoodTitle: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.textSub, marginBottom: 14, textAlign: "left" },
   moodRow: { flexDirection: "row", justifyContent: "space-around" },
   moodItem: { alignItems: "center", gap: 6 },
   moodCircle: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
@@ -512,6 +583,11 @@ const styles = StyleSheet.create({
   moodLabel: { fontSize: 10, fontFamily: "Pretendard-Regular", textAlign: "center", lineHeight: 14 },
   moodDisplay: { alignItems: "center", gap: 8 },
   moodDisplayLabel: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.textSub },
+  modalMessageBubble: { backgroundColor: Colors.surface, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 20 },
+  modalMessageBubbleText: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.text },
+  modalMessageTitle: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.textSub, marginBottom: 8 },
+  modalMessageInput: { backgroundColor: Colors.surface, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, fontSize: 14, color: Colors.text },
+  modalMessageHint: { fontSize: 11, fontFamily: "Pretendard-Regular", color: Colors.textHint, marginTop: 6 },
   btnSave: { paddingVertical: 13, borderRadius: 16, backgroundColor: Colors.accent, alignItems: "center", justifyContent: "center" },
   btnSaveText: { fontSize: 14, fontFamily: "Pretendard-Medium", color: Colors.white },
   btnRow: { flexDirection: "row", gap: 10 },
