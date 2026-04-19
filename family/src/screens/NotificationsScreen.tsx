@@ -17,6 +17,7 @@ export type NotificationItem = {
   type: NotifTypeKey;
   nickname: string | null;
   message: string;
+  subMessage: string | null;
   time: string;
   read: boolean;
   emoji: string | null;
@@ -29,42 +30,132 @@ type NavigationProp = NativeStackNavigationProp<MainTabStackParamList>;
 // ─── 알림 유형 정의 ───────────────────────────────────────────────────────────
 
 const NOTIF_TYPES = {
-  letter: { icon: "💌", iconType: "profile", label: "편지 도착" },
-  mood: { icon: "🌞", iconType: "profile", label: "기분 변경" },
-  message: { icon: "💬", iconType: "profile", label: "메시지 변경" },
-  comment: { icon: "💬", iconType: "photo", label: "앨범 댓글" },
-  album: { icon: "🖼️", iconType: "profile", label: "사진 등록" },
-  member: { icon: "👋", iconType: "profile", label: "구성원 참여" },
-  temp_up: { icon: "🌡️", iconType: "system", label: "온도 상승" },
-  temp_down: { icon: "🌡️", iconType: "system", label: "온도 하락" },
+  mood: { icon: "🌞", iconType: "system", label: "기분 변경" },
+  comment: { icon: "💬", iconType: "profile", label: "앨범 댓글" },
+  album: { icon: "🖼️", iconType: "system", label: "사진 등록" },
+  member: { icon: "👋", iconType: "system", label: "구성원 참여" },
   notice: { icon: "📢", iconType: "system", label: "공지사항" },
+  story: { icon: "📷", iconType: "system", label: "새 스토리" },
+  poke: { icon: "👈", iconType: "system", label: "콕 찌르기" },
+  story_comment: { icon: "💬", iconType: "profile", label: "스토리 댓글" },
 } as const;
 
 // ─── 샘플 데이터 ─────────────────────────────────────────────────────────────
 
 const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  { id: 1, type: "letter", nickname: "이영희", message: "편지를 보냈어요", time: "방금 전", read: false, emoji: "👩", photoColor: null },
-  { id: 2, type: "message", nickname: "김철수", message: "새로운 메세지를 남겼어요", time: "5분 전", read: false, emoji: "👨", photoColor: null },
-  { id: 3, type: "comment", nickname: "하은", message: "사진에 댓글을 남겼어요", time: "30분 전", read: false, emoji: "👧", photoColor: "#D4B896" },
-  { id: 4, type: "temp_up", nickname: null, message: "집 온도가 75도를 돌파했어요!", time: "1시간 전", read: false, emoji: null, photoColor: null },
-  { id: 5, type: "album", nickname: "하은", message: "앨범에 사진을 등록했어요", time: "3시간 전", read: true, emoji: "👧", photoColor: null },
-  { id: 6, type: "mood", nickname: "민준", message: "기분을 변경했어요", time: "5시간 전", read: true, emoji: "🧒", photoColor: null },
-  { id: 7, type: "message", nickname: "이영희", message: "새로운 메세지를 남겼어요", time: "어제", read: true, emoji: "👩", photoColor: null },
-  { id: 8, type: "comment", nickname: "김철수", message: "사진에 댓글을 남겼어요", time: "어제", read: true, emoji: "👨", photoColor: "#C9A882" },
-  { id: 9, type: "temp_down", nickname: null, message: "집 온도가 50도 아래로 내려갔어요", time: "2일 전", read: true, emoji: null, photoColor: null },
-  { id: 10, type: "member", nickname: "지수", message: "가족 공간에 합류했어요", time: "3일 전", read: true, emoji: "👦", photoColor: null },
-  { id: 11, type: "notice", nickname: null, message: "서비스 업데이트 안내", time: "4일 전", read: true, emoji: null, photoColor: null },
+  {
+    id: 1,
+    type: "story",
+    nickname: "김철수",
+    message: "새로운 스토리를 올렸어요",
+    subMessage: "지금 무엇을 하고 있는지 확인해보세요.",
+    time: "방금 전",
+    read: false,
+    emoji: null,
+    photoColor: null,
+  },
+  {
+    id: 2,
+    type: "poke",
+    nickname: "하은",
+    message: "콕 찔렀어요 👈",
+    subMessage: "가족들에게 지금 무엇을 하고 있는지 알려주세요.",
+    time: "5분 전",
+    read: false,
+    emoji: null,
+    photoColor: null,
+  },
+  {
+    id: 3,
+    type: "story_comment",
+    nickname: "이영희",
+    message: "스토리에 댓글을 남겼어요",
+    subMessage: "지수야 밥은 먹었니?",
+    time: "30분 전",
+    read: false,
+    emoji: "👩",
+    photoColor: null,
+  },
+  {
+    id: 4,
+    type: "mood",
+    nickname: "김철수",
+    message: "기분을 변경했어요",
+    subMessage: null,
+    time: "1시간 전",
+    read: false,
+    emoji: null,
+    photoColor: null,
+  },
+  {
+    id: 5,
+    type: "story",
+    nickname: "지수",
+    message: "새로운 스토리를 올렸어요",
+    subMessage: "지금 무엇을 하고 있는지 확인해보세요.",
+    time: "3시간 전",
+    read: true,
+    emoji: null,
+    photoColor: null,
+  },
+  {
+    id: 6,
+    type: "story_comment",
+    nickname: "민준",
+    message: "스토리에 댓글을 남겼어요",
+    subMessage: "아빠 멋있다!",
+    time: "5시간 전",
+    read: true,
+    emoji: "🧒",
+    photoColor: null,
+  },
+  {
+    id: 7,
+    type: "poke",
+    nickname: "이영희",
+    message: "콕 찔렀어요 👈",
+    subMessage: "가족들에게 지금 무엇을 하고 있는지 알려주세요.",
+    time: "어제",
+    read: true,
+    emoji: null,
+    photoColor: null,
+  },
+  {
+    id: 8,
+    type: "comment",
+    nickname: "김철수",
+    message: "사진에 댓글을 남겼어요",
+    subMessage: "우와 어디야?",
+    time: "어제",
+    read: true,
+    emoji: "👨",
+    photoColor: "#C9A882",
+  },
+  {
+    id: 9,
+    type: "member",
+    nickname: "지수",
+    message: "가족 공간에 합류했어요",
+    subMessage: null,
+    time: "3일 전",
+    read: true,
+    emoji: null,
+    photoColor: null,
+  },
+  {
+    id: 10,
+    type: "notice",
+    nickname: null,
+    message: "서비스 업데이트 안내",
+    subMessage: null,
+    time: "4일 전",
+    read: true,
+    emoji: null,
+    photoColor: null,
+  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** 받침 여부에 따라 '가' / '이가' 반환 */
-export function getSubjectParticle(name: string): string {
-  if (!name) return "";
-  const code = name.charCodeAt(name.length - 1);
-  if (code < 0xac00 || code > 0xd7a3) return "가";
-  return (code - 0xac00) % 28 === 0 ? "가" : "이가";
-}
 
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -84,17 +175,6 @@ function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
 
 function NotifIcon({ notif }: { notif: NotificationItem }) {
   const typeDef = NOTIF_TYPES[notif.type];
-
-  if (typeDef.iconType === "photo" && notif.photoColor) {
-    return (
-      <View
-        style={[
-          styles.notifIconPhoto,
-          { backgroundColor: notif.photoColor },
-        ]}
-      />
-    );
-  }
 
   if (typeDef.iconType === "profile" && notif.emoji) {
     return (
@@ -203,15 +283,19 @@ export default function NotificationsScreen() {
             >
               <NotifIcon notif={notif} />
               <View style={styles.rowBody}>
-                <Text style={styles.rowMessage} numberOfLines={3}>
+                <Text style={styles.rowMessage} numberOfLines={2}>
                   {notif.nickname ? (
                     <Text style={styles.rowName}>
-                      {notif.nickname}
-                      {getSubjectParticle(notif.nickname)}{" "}
+                      {notif.nickname}님이{" "}
                     </Text>
                   ) : null}
                   {notif.message}
                 </Text>
+                {notif.subMessage && (
+                  <Text style={styles.rowSubMessage} numberOfLines={1}>
+                    {notif.subMessage}
+                  </Text>
+                )}
                 <Text style={styles.rowTime}>{notif.time}</Text>
               </View>
             </Pressable>
@@ -329,6 +413,13 @@ const styles = StyleSheet.create({
   rowName: {
     fontFamily: "Pretendard-Medium",
     color: Colors.text,
+  },
+  rowSubMessage: {
+    fontSize: 13,
+    fontFamily: "Pretendard-Regular",
+    color: Colors.textSub,
+    lineHeight: 18,
+    marginBottom: 6,
   },
   rowTime: {
     fontSize: 12,

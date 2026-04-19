@@ -444,7 +444,15 @@ function PhotoSwiper({
                   </View>
                 )}
               </View>
-              {isMine && <RoundIconButton label="+" />}
+              {isMine && (
+                <TouchableOpacity
+                  style={styles.addPhotoBtn}
+                  onPress={() => {}}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.addPhotoBtnText}>+</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
@@ -689,7 +697,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontFamily: "Pretendard-Bold",
+    fontFamily: "NanumSquareRound-ExtraBold",
     color: Colors.text,
   },
   notifBtn: {
@@ -781,7 +789,7 @@ const styles = StyleSheet.create({
   },
   moodGuideText: {
     fontSize: 13,
-    fontFamily: "Pretendard-Regular",
+    fontFamily: "NanumSquareRound-Bold",
     color: Colors.textSub,
     textAlign: "center",
     marginBottom: 16,
@@ -913,6 +921,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.white,
   },
+  addPhotoBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addPhotoBtnText: {
+    fontSize: 22,
+    color: Colors.white,
+    lineHeight: 24,
+  },
   commentBtnWrap: {
     position: "relative",
   },
@@ -950,13 +971,13 @@ const styles = StyleSheet.create({
   },
   emptyPhotoCaption: {
     fontSize: 13,
-    fontFamily: "Pretendard-Regular",
+    fontFamily: "NanumSquareRound-Regular",
     color: Colors.textSub,
     textAlign: "center",
   },
   emptyPhotoHint: {
     fontSize: 11,
-    fontFamily: "Pretendard-Regular",
+    fontFamily: "NanumSquareRound-Regular",
     color: Colors.textHint,
     textAlign: "center",
     marginTop: 6,
@@ -973,6 +994,7 @@ const styles = StyleSheet.create({
   },
   emptyPhotoOtherText: {
     fontSize: 13,
+    fontFamily: "NanumSquareRound-Regular",
     color: Colors.textHint,
     textAlign: "center",
   },
@@ -1016,7 +1038,7 @@ const styles = StyleSheet.create({
   },
   todayTitle: {
     fontSize: 17,
-    fontFamily: "Pretendard-Bold",
+    fontFamily: "NanumSquareRound-ExtraBold",
     color: Colors.text,
     marginBottom: 26,
   },

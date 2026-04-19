@@ -16,6 +16,10 @@ export default function App() {
       "Pretendard-Regular": require("./src/assets/fonts/Pretendard-Regular.otf"),
       "Pretendard-Medium":  require("./src/assets/fonts/Pretendard-Medium.otf"),
       "Pretendard-Bold":    require("./src/assets/fonts/Pretendard-Bold.otf"),
+      "NanumSquareRound-Light": require("./src/assets/fonts/NanumSquareRoundL.ttf"),
+      "NanumSquareRound-Regular": require("./src/assets/fonts/NanumSquareRoundR.ttf"),
+      "NanumSquareRound-Bold": require("./src/assets/fonts/NanumSquareRoundB.ttf"),
+      "NanumSquareRound-ExtraBold": require("./src/assets/fonts/NanumSquareRoundEB.ttf"),
     }).then(() => {
       setFontsLoaded(true);
       SplashScreen.hideAsync();
