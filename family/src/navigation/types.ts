@@ -26,6 +26,16 @@ export type MainTabStackParamList = {
 
   Notifications: undefined;
 
+  AlbumPhotos: {
+    folderId: number;
+    folderName: string;
+    folderCount: number;
+    folderMaxCount: number;
+    folderCoverColor: string;
+  };
+
+  AlbumDetail: { photoId: number };
+
 };
 
 

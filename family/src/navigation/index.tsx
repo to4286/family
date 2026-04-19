@@ -11,6 +11,8 @@ import HomeScreen from "../screens/HomeScreen";
 import AlbumScreen from "../screens/Album";
 import MypageScreen from "../screens/Mypage";
 import NotificationsScreen from "../screens/NotificationsScreen";
+import AlbumPhotosScreen from "../screens/AlbumPhotos";
+import AlbumDetailScreen from "../screens/AlbumDetail";
 import ConceptQuestionScreen from "../screens/ConceptQuestion";
 import SettingsScreen from "../screens/Settings";
 
@@ -185,6 +187,8 @@ function MainTabStackNavigator() {
         component={NotificationsScreen}
         options={{ gestureEnabled: true, gestureDirection: "horizontal" }}
       />
+      <MainTabStack.Screen name="AlbumPhotos" component={AlbumPhotosScreen} options={{ headerShown: false }} />
+      <MainTabStack.Screen name="AlbumDetail" component={AlbumDetailScreen} options={{ headerShown: false }} />
     </MainTabStack.Navigator>
   );
 }

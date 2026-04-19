@@ -1,0 +1,229 @@
+import React from "react";
+import {
+  View,
+  Text,
+  Image,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Dimensions,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
+import Svg, { Path } from "react-native-svg";
+import { Colors } from "../constants/colors";
+import type { MainTabStackParamList } from "../navigation/types";
+
+type Props = NativeStackScreenProps<MainTabStackParamList, "AlbumPhotos">;
+
+// ─── Data (임시) ───────────────────────────────────────────────────────────────
+
+type Photo = {
+  id: number;
+  imageUri?: string;
+  color: string;
+  uploadedAt: string;
+};
+
+const DUMMY_PHOTOS: Photo[] = [
+  { id: 1, color: "#D4B896", uploadedAt: "2일 전" },
+  { id: 2, color: "#C9A882", uploadedAt: "3일 전" },
+  { id: 3, color: "#E8C9A0", uploadedAt: "4일 전" },
+  { id: 4, color: "#B89878", uploadedAt: "5일 전" },
+  { id: 5, color: "#DDBF9A", uploadedAt: "6일 전" },
+  { id: 6, color: "#C4A87E", uploadedAt: "7일 전" },
+  { id: 7, color: "#E0C8A8", uploadedAt: "8일 전" },
+  { id: 8, color: "#BFA080", uploadedAt: "9일 전" },
+  { id: 9, color: "#D8BC94", uploadedAt: "10일 전" },
+];
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const GRID_GAP = 3;
+const GRID_PADDING = 3;
+const GRID_COL3 = (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP * 2) / 3;
+
+// ─── ChevronLeft (알림 화면과 동일) ────────────────────────────────────────────
+
+function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M15 18l-6-6 6-6"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// ─── Photo Grid ────────────────────────────────────────────────────────────────
+
+function PhotoGrid({ photos, onPhotoPress }: { photos: Photo[]; onPhotoPress: (photo: Photo) => void }) {
+  const rows: React.ReactNode[] = [];
+  let i = 0;
+  const patterns = [1, 2, 1, 3];
+  let patIdx = 0;
+
+  while (i < photos.length) {
+    const pat = patterns[patIdx % 4];
+    patIdx++;
+
+    if (pat === 1 && i + 2 < photos.length) {
+      const p = [photos[i], photos[i + 1], photos[i + 2]];
+      rows.push(
+        <View key={`r${i}`} style={{ flexDirection: "row", gap: GRID_GAP, marginBottom: GRID_GAP }}>
+          {p.map((ph) => (
+            <TouchableOpacity key={ph.id} onPress={() => onPhotoPress(ph)} activeOpacity={0.9}
+              style={{ width: GRID_COL3, height: GRID_COL3, borderRadius: 4, backgroundColor: ph.color, overflow: "hidden" }}>
+              {ph.imageUri && <Image source={{ uri: ph.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      );
+      i += 3;
+    } else if (pat === 2 && i + 2 < photos.length) {
+      const big = photos[i];
+      const sm1 = photos[i + 1];
+      const sm2 = photos[i + 2];
+      const bigSize = GRID_COL3 * 2 + GRID_GAP;
+      rows.push(
+        <View key={`r${i}`} style={{ flexDirection: "row", gap: GRID_GAP, marginBottom: GRID_GAP }}>
+          <TouchableOpacity onPress={() => onPhotoPress(big)} activeOpacity={0.9}
+            style={{ width: bigSize, height: bigSize, borderRadius: 4, backgroundColor: big.color, overflow: "hidden" }}>
+            {big.imageUri && <Image source={{ uri: big.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
+          </TouchableOpacity>
+          <View style={{ gap: GRID_GAP }}>
+            <TouchableOpacity onPress={() => onPhotoPress(sm1)} activeOpacity={0.9}
+              style={{ width: GRID_COL3, height: GRID_COL3, borderRadius: 4, backgroundColor: sm1.color, overflow: "hidden" }}>
+              {sm1.imageUri && <Image source={{ uri: sm1.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => onPhotoPress(sm2)} activeOpacity={0.9}
+              style={{ width: GRID_COL3, height: GRID_COL3, borderRadius: 4, backgroundColor: sm2.color, overflow: "hidden" }}>
+              {sm2.imageUri && <Image source={{ uri: sm2.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+      i += 3;
+    } else if (pat === 3 && i < photos.length) {
+      const ph = photos[i];
+      rows.push(
+        <TouchableOpacity key={`r${i}`} onPress={() => onPhotoPress(ph)} activeOpacity={0.9}
+          style={{ width: "100%", height: 220, borderRadius: 4, backgroundColor: ph.color, marginBottom: GRID_GAP, overflow: "hidden" }}>
+          {ph.imageUri && <Image source={{ uri: ph.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
+        </TouchableOpacity>
+      );
+      i += 1;
+    } else {
+      const remaining = photos.slice(i);
+      rows.push(
+        <View key={`r${i}`} style={{ flexDirection: "row", gap: GRID_GAP, marginBottom: GRID_GAP }}>
+          {remaining.map((ph) => (
+            <TouchableOpacity key={ph.id} onPress={() => onPhotoPress(ph)} activeOpacity={0.9}
+              style={{ width: GRID_COL3, height: GRID_COL3, borderRadius: 4, backgroundColor: ph.color, overflow: "hidden" }}>
+              {ph.imageUri && <Image source={{ uri: ph.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      );
+      break;
+    }
+  }
+  return <View style={{ padding: GRID_PADDING }}>{rows}</View>;
+}
+
+// ─── Screen ────────────────────────────────────────────────────────────────────
+
+export default function AlbumPhotosScreen({ route }: Props) {
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
+  const { folderName, folderCount, folderMaxCount, folderCoverColor } = route.params;
+
+  return (
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.6}>
+          <ChevronLeftIcon size={32} color={Colors.textSub} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{folderName}</Text>
+        <View style={{ width: 44 }} />
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+      >
+        <View style={[styles.hero, { backgroundColor: folderCoverColor }]}>
+          <View style={styles.heroContent}>
+            <Text style={styles.heroTitle}>{folderName}</Text>
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>{folderCount}/{folderMaxCount}</Text>
+            </View>
+          </View>
+        </View>
+
+        <PhotoGrid
+          photos={DUMMY_PHOTOS}
+          onPhotoPress={(p) => navigation.navigate("AlbumDetail", { photoId: p.id })}
+        />
+      </ScrollView>
+
+      <TouchableOpacity style={styles.fab} onPress={() => {}} activeOpacity={0.85}>
+        <Text style={styles.fabText}>+ 사진 추가</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.white },
+  header: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.white,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
+  backBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginLeft: -8 },
+  headerTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: "Pretendard-Medium",
+    color: Colors.text,
+    textAlign: "center",
+  },
+  hero: { width: "100%", height: 220, position: "relative" },
+  heroContent: {
+    position: "absolute",
+    bottom: 16,
+    left: 20,
+    right: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  heroTitle: { fontSize: 18, fontFamily: "Pretendard-Medium", color: Colors.white },
+  heroBadge: { backgroundColor: "rgba(0,0,0,0.4)", borderRadius: 10, paddingVertical: 3, paddingHorizontal: 10 },
+  heroBadgeText: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.white },
+  fab: {
+    position: "absolute",
+    bottom: 40,
+    right: 24,
+    backgroundColor: Colors.accent,
+    borderRadius: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    shadowColor: "#5A3E1B",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  fabText: { fontSize: 14, fontFamily: "Pretendard-Medium", color: Colors.white },
+});

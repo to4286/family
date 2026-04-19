@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
-    marginLeft: -8,
+    marginLeft: -16,
   },
   headerSideRight: {
     width: 80,
