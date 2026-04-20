@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -37,6 +37,12 @@ const DUMMY_PHOTOS: Photo[] = [
   { id: 8, color: "#BFA080", uploadedAt: "9일 전" },
   { id: 9, color: "#D8BC94", uploadedAt: "10일 전" },
 ];
+
+function pickRandomHeroPhoto(photos: Photo[]): Photo | undefined {
+  if (photos.length === 0) return undefined;
+  const randomIndex = Math.floor(Math.random() * photos.length);
+  return photos[randomIndex];
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GRID_GAP = 3;
@@ -142,6 +148,8 @@ export default function AlbumPhotosScreen({ route }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
   const { folderName, folderCount, folderMaxCount, folderCoverColor } = route.params;
 
+  const [heroPhoto] = useState<Photo | undefined>(() => pickRandomHeroPhoto(DUMMY_PHOTOS));
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -157,14 +165,25 @@ export default function AlbumPhotosScreen({ route }: Props) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
       >
-        <View style={[styles.hero, { backgroundColor: folderCoverColor }]}>
+        <TouchableOpacity
+          style={[styles.hero, { backgroundColor: heroPhoto?.color || folderCoverColor }]}
+          activeOpacity={0.9}
+          onPress={() => {
+            if (heroPhoto) {
+              navigation.navigate("AlbumDetail", { photoId: heroPhoto.id });
+            }
+          }}
+        >
+          {heroPhoto?.imageUri && (
+            <Image source={{ uri: heroPhoto.imageUri }} style={styles.heroImage} resizeMode="cover" />
+          )}
           <View style={styles.heroContent}>
             <Text style={styles.heroTitle}>{folderName}</Text>
             <View style={styles.heroBadge}>
               <Text style={styles.heroBadgeText}>{folderCount}/{folderMaxCount}</Text>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
 
         <PhotoGrid
           photos={DUMMY_PHOTOS}
@@ -199,6 +218,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   hero: { width: "100%", height: 220, position: "relative" },
+  heroImage: {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+  },
   heroContent: {
     position: "absolute",
     bottom: 16,
@@ -208,7 +232,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  heroTitle: { fontSize: 18, fontFamily: "Pretendard-Medium", color: Colors.white },
+  heroTitle: { fontSize: 18, fontFamily: "NanumSquareRound-Bold", color: Colors.white },
   heroBadge: { backgroundColor: "rgba(0,0,0,0.4)", borderRadius: 10, paddingVertical: 3, paddingHorizontal: 10 },
   heroBadgeText: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.white },
   fab: {

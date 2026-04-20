@@ -13,7 +13,9 @@ import MypageScreen from "../screens/Mypage";
 import NotificationsScreen from "../screens/NotificationsScreen";
 import AlbumPhotosScreen from "../screens/AlbumPhotos";
 import AlbumDetailScreen from "../screens/AlbumDetail";
-import ConceptQuestionScreen from "../screens/ConceptQuestion";
+import ConceptCategoriesScreen from "../screens/ConceptCategories";
+import ConceptQuestionsScreen from "../screens/ConceptQuestions";
+import ConceptAnswerScreen from "../screens/ConceptAnswer";
 import SettingsScreen from "../screens/Settings";
 
 import { Colors } from "../constants/colors";
@@ -189,6 +191,9 @@ function MainTabStackNavigator() {
       />
       <MainTabStack.Screen name="AlbumPhotos" component={AlbumPhotosScreen} options={{ headerShown: false }} />
       <MainTabStack.Screen name="AlbumDetail" component={AlbumDetailScreen} options={{ headerShown: false }} />
+      <MainTabStack.Screen name="ConceptCategories" component={ConceptCategoriesScreen} options={{ headerShown: false }} />
+      <MainTabStack.Screen name="ConceptQuestions" component={ConceptQuestionsScreen} options={{ headerShown: false }} />
+      <MainTabStack.Screen name="ConceptAnswer" component={ConceptAnswerScreen} options={{ headerShown: false }} />
     </MainTabStack.Navigator>
   );
 }
@@ -200,11 +205,6 @@ export default function RootNavigator() {
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       <RootStack.Screen name="MainTab" component={MainTabStackNavigator} />
       <RootStack.Screen name="OnboardingStack" component={OnboardingNavigator} />
-      <RootStack.Screen
-        name="ConceptQuestion"
-        component={ConceptQuestionScreen}
-        options={{ presentation: "modal" }}
-      />
       <RootStack.Screen name="Settings" component={SettingsScreen} />
     </RootStack.Navigator>
   );

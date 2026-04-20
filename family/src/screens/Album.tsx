@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Modal,
   StyleSheet,
   Dimensions,
+  Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -43,6 +44,18 @@ const FOLDER_PADDING = 20;
 const FOLDER_SIZE = (SCREEN_WIDTH - FOLDER_PADDING * 2 - FOLDER_GAP) / 2;
 /** 홈 화면 헤더(알림 버튼 포함)와 동일한 최소 높이 */
 const HEADER_MIN_HEIGHT = 66;
+
+/** 폴더 카드 ⋯ 더보기 버튼(원형·터치 영역) */
+const FOLDER_MENU_BTN_SIZE = 32;
+const FOLDER_MENU_BTN_OFFSET = 12;
+const FOLDER_MENU_BTN_OVERLAY = "rgba(0,0,0,0.3)";
+const FOLDER_MENU_DOT_GAP = 3;
+const FOLDER_MENU_DOT_SIZE = 4;
+
+/** FolderMenuModal 바텀시트 slide (딤은 Modal fade) */
+const BOTTOM_SHEET_SLIDE_OFFSET = 300;
+const BOTTOM_SHEET_OPEN_MS = 250;
+const BOTTOM_SHEET_CLOSE_MS = 200;
 
 // ─── Shared Components ─────────────────────────────────────────────────────────
 
@@ -109,19 +122,51 @@ function FolderMenuModal({ visible, folder, onClose, onRename, onDelete }: {
   onRename: () => void;
   onDelete: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+  const slideAnim = useRef(new Animated.Value(BOTTOM_SHEET_SLIDE_OFFSET)).current;
+
+  useEffect(() => {
+    if (visible) {
+      slideAnim.setValue(BOTTOM_SHEET_SLIDE_OFFSET);
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: BOTTOM_SHEET_OPEN_MS,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, slideAnim]);
+
+  const handleClose = () => {
+    Animated.timing(slideAnim, {
+      toValue: BOTTOM_SHEET_SLIDE_OFFSET,
+      duration: BOTTOM_SHEET_CLOSE_MS,
+      useNativeDriver: true,
+    }).start(() => onClose());
+  };
+
   if (!folder) return null;
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
-        <View style={styles.menuCard} onStartShouldSetResponder={() => true}>
-          <TouchableOpacity style={styles.menuItem} onPress={onRename}>
-            <Text style={styles.menuItemText}>✏️ 이름 변경</Text>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+      <TouchableOpacity style={styles.bottomSheetOverlay} activeOpacity={1} onPress={handleClose}>
+        <Animated.View
+          style={[
+            styles.bottomSheet,
+            {
+              paddingBottom: insets.bottom + 12,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
+          onStartShouldSetResponder={() => true}
+        >
+          <View style={styles.bottomSheetHandle} />
+          <TouchableOpacity style={styles.bottomSheetItem} onPress={onRename} activeOpacity={0.7}>
+            <Text style={styles.bottomSheetItemText}>이름 변경</Text>
           </TouchableOpacity>
-          <View style={styles.menuDivider} />
-          <TouchableOpacity style={styles.menuItem} onPress={onDelete}>
-            <Text style={[styles.menuItemText, { color: "#D4645A" }]}>🗑️ 삭제</Text>
+          <View style={styles.bottomSheetDivider} />
+          <TouchableOpacity style={styles.bottomSheetItem} onPress={onDelete} activeOpacity={0.7}>
+            <Text style={[styles.bottomSheetItemText, styles.bottomSheetItemTextDestructive]}>삭제하기</Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       </TouchableOpacity>
     </Modal>
   );
@@ -379,23 +424,28 @@ const styles = StyleSheet.create({
   },
   folderMenuBtn: {
     position: "absolute",
-    top: 10,
-    right: 10,
-    padding: 4,
+    top: FOLDER_MENU_BTN_OFFSET,
+    right: FOLDER_MENU_BTN_OFFSET,
+    width: FOLDER_MENU_BTN_SIZE,
+    height: FOLDER_MENU_BTN_SIZE,
+    borderRadius: FOLDER_MENU_BTN_SIZE / 2,
+    backgroundColor: FOLDER_MENU_BTN_OVERLAY,
+    alignItems: "center",
+    justifyContent: "center",
   },
   folderMenuDots: {
     flexDirection: "row",
-    gap: 4,
+    gap: FOLDER_MENU_DOT_GAP,
   },
   folderMenuDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: FOLDER_MENU_DOT_SIZE,
+    height: FOLDER_MENU_DOT_SIZE,
+    borderRadius: FOLDER_MENU_DOT_SIZE / 2,
     backgroundColor: Colors.white,
   },
   folderName: {
     fontSize: 14,
-    fontFamily: "Pretendard-Medium",
+    fontFamily: "NanumSquareRound-Bold",
     color: Colors.text,
     textAlign: "center",
   },
@@ -514,23 +564,41 @@ const styles = StyleSheet.create({
     fontFamily: "Pretendard-Regular",
     color: Colors.text,
   },
-  menuCard: {
-    width: 200,
+  bottomSheetOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(46,34,22,0.5)",
+    justifyContent: "flex-end",
+  },
+  bottomSheet: {
     backgroundColor: Colors.white,
-    borderRadius: 12,
-    overflow: "hidden",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 12,
   },
-  menuItem: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+  bottomSheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+    alignSelf: "center",
+    marginBottom: 8,
   },
-  menuItemText: {
-    fontSize: 14,
-    fontFamily: "Pretendard-Regular",
+  bottomSheetItem: {
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    alignItems: "center",
+  },
+  bottomSheetItemText: {
+    fontSize: 16,
+    fontFamily: "Pretendard-Medium",
     color: Colors.text,
   },
-  menuDivider: {
+  bottomSheetItemTextDestructive: {
+    color: "#D4645A",
+  },
+  bottomSheetDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: Colors.border,
+    marginHorizontal: 24,
   },
 });

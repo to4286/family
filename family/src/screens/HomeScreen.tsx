@@ -46,6 +46,10 @@ type MemberPhoto = Member["photos"][number];
 /** 가입 시 선택한 가족 유형 텍스트 — Supabase 연동 시 동적 로드 예정 */
 const FAMILY_TITLE = "대화가 많은 우리 가족 🏡";
 
+/** 프로필 닉네임·기분 라벨 등 동일 패밀리 텍스트 */
+const FONT_NANUM_ROUND_REGULAR = "NanumSquareRound-Regular";
+const FONT_NANUM_ROUND_BOLD = "NanumSquareRound-Bold";
+
 const MEMBERS: Member[] = [
   {
     id: 3,
@@ -649,7 +653,14 @@ export default function HomeScreen() {
                   <TouchableOpacity
                     style={styles.learnMoreBtn}
                     activeOpacity={0.85}
-                    onPress={() => {}}
+                    onPress={() => {
+                      if (selectedMember) {
+                        navigation.navigate("ConceptCategories", {
+                          memberId: selectedMember.id,
+                          memberNickname: selectedMember.nickname,
+                        });
+                      }
+                    }}
                   >
                     <Text style={styles.learnMoreBtnText}>더 알아가기</Text>
                   </TouchableOpacity>
@@ -767,7 +778,7 @@ const styles = StyleSheet.create({
   },
   profileNickname: {
     fontSize: 14,
-    fontFamily: "Pretendard-Regular",
+    fontFamily: FONT_NANUM_ROUND_BOLD,
     color: Colors.text,
     marginTop: 4,
     textAlign: "center",
@@ -815,7 +826,7 @@ const styles = StyleSheet.create({
   },
   moodLabel: {
     fontSize: 10,
-    fontFamily: "Pretendard-Regular",
+    fontFamily: FONT_NANUM_ROUND_REGULAR,
     textAlign: "center",
     lineHeight: 14,
   },
@@ -857,11 +868,12 @@ const styles = StyleSheet.create({
   },
   otherMoodLabel: {
     fontSize: 13,
-    fontFamily: "Pretendard-Medium",
+    fontFamily: FONT_NANUM_ROUND_BOLD,
     color: Colors.accent,
   },
   otherMoodPlaceholder: {
     fontSize: 13,
+    fontFamily: FONT_NANUM_ROUND_REGULAR,
     color: Colors.textHint,
     textAlign: "center",
     marginBottom: 12,
