@@ -51,15 +51,6 @@ const NEXT_ACTIVE_QUESTION_TEMPLATE = {
   question: "아침에 제일 먼저 하는 일은",
 } as const;
 
-/** ConceptCategories `catCard`와 동일한 카드 그림자 */
-const CARD_SHADOW = {
-  shadowColor: "#8B6914",
-  shadowOffset: { width: 1, height: 3 },
-  shadowOpacity: 0.15,
-  shadowRadius: 1.5,
-  elevation: 3,
-} as const;
-
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -79,73 +70,40 @@ function MemoCapsule({ text }: { text: string }) {
   );
 }
 
-function ActiveQuestionBody({ question }: { question: string }) {
-  return (
-    <View style={styles.contentWrap}>
-      <View style={styles.sentenceWrap}>
-        <Text style={styles.questionText} numberOfLines={1}>
-          {question}
-        </Text>
-        <View style={styles.dashedUnderlineWrap}>
-          {/* 투명 텍스트로 기준선(Baseline)과 너비를 완벽하게 확보 (color: transparent 버그 대비 opacity: 0 사용) */}
-          <Text style={[styles.transparentBlankText, { opacity: 0 }]} numberOfLines={1}>
-            {"AAAAAAAAAA"}
-          </Text>
-          {/* 확보된 영역 바로 아래에 SVG 점선을 강제로 렌더링 */}
-          <View style={styles.svgDashContainer}>
-            <Svg width="100%" height="2">
-              <Path d="M0 1 L300 1" stroke={Colors.textHint} strokeWidth="1.5" strokeDasharray="4 4" />
-            </Svg>
-          </View>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function AnsweredQuestionBody({
-  question,
-  answer,
-  memo,
-}: {
-  question: string;
-  answer: string;
-  memo?: string;
-}) {
-  return (
-    <View style={styles.contentWrap}>
-      <View style={styles.sentenceWrap}>
-        <Text style={styles.questionText} numberOfLines={1}>
-          {question}
-        </Text>
-        {/* 실선 답변 래퍼: 공간이 부족하면 여기서 줄어들며 '...' 처리됨 */}
-        <View style={styles.solidUnderlineWrap}>
-          <Text style={styles.answerText} numberOfLines={1} ellipsizeMode="tail">
-            {answer}
-          </Text>
-        </View>
-      </View>
-      {memo ? <MemoCapsule text={memo} /> : null}
-    </View>
-  );
-}
-
 function QuestionCard({ item, onPress }: { item: QuestionItem; onPress: (item: QuestionItem) => void }) {
+  const isActive = item.status === "active";
   return (
-    <TouchableOpacity style={styles.card} activeOpacity={0.88} onPress={() => onPress(item)}>
+    <TouchableOpacity style={[styles.card, styles.shadow]} activeOpacity={0.88} onPress={() => onPress(item)}>
       <View style={styles.cardRow}>
         <View style={styles.numberBadge}>
           <Text style={styles.numberText}>{item.id}</Text>
         </View>
-        {item.status === "active" ? (
-          <ActiveQuestionBody question={item.question} />
-        ) : (
-          <AnsweredQuestionBody
-            question={item.question}
-            answer={item.answer ?? ""}
-            memo={item.memo}
-          />
-        )}
+        <View style={styles.contentWrap}>
+          <View style={styles.sentenceWrap}>
+            <Text style={styles.questionText} numberOfLines={1}>
+              {item.question}
+            </Text>
+            {isActive ? (
+              <View style={styles.dashedUnderlineWrap}>
+                <Text style={[styles.transparentBlankText, { opacity: 0 }]} numberOfLines={1}>
+                  {"AAAAAAAAAA"}
+                </Text>
+                <View style={styles.svgDashContainer}>
+                  <Svg width="100%" height="2">
+                    <Path d="M0 1 L300 1" stroke={Colors.textHint} strokeWidth="1.5" strokeDasharray="4 4" />
+                  </Svg>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.solidUnderlineWrap}>
+                <Text style={styles.answerText} numberOfLines={1} ellipsizeMode="tail">
+                  {item.answer}
+                </Text>
+              </View>
+            )}
+          </View>
+          {!isActive && item.memo ? <MemoCapsule text={item.memo} /> : null}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -206,15 +164,7 @@ export default function ConceptQuestionsScreen({ route }: Props) {
     }
   }, [selectedItem, draftAnswer, draftMemo, dismissModal]);
 
-  const handleDimPress = useCallback(() => {
-    if (showExitConfirm) {
-      setShowExitConfirm(false);
-      return;
-    }
-    handleCloseModal();
-  }, [showExitConfirm, handleCloseModal]);
-
-  const handleModalRequestClose = useCallback(() => {
+  const handleRequestClose = useCallback(() => {
     if (showExitConfirm) {
       setShowExitConfirm(false);
       return;
@@ -232,25 +182,20 @@ export default function ConceptQuestionsScreen({ route }: Props) {
           ? {
               ...q,
               answer: draftAnswer,
-              memo: draftMemo.trim() === "" ? undefined : draftMemo,
+              memo: draftMemo.trim() || undefined,
               status: "answered" as const,
             }
           : q,
       );
 
-      if (!wasActive) {
-        return updated;
-      }
-
-      const maxId = Math.max(...updated.map((q) => q.id));
-      return [
-        ...updated,
-        {
-          id: maxId + 1,
+      if (wasActive) {
+        updated.push({
+          id: Math.max(...updated.map((q) => q.id)) + 1,
           question: NEXT_ACTIVE_QUESTION_TEMPLATE.question,
-          status: "active" as const,
-        },
-      ];
+          status: "active",
+        });
+      }
+      return updated;
     });
 
     dismissModal();
@@ -287,15 +232,15 @@ export default function ConceptQuestionsScreen({ route }: Props) {
         visible={isModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={handleModalRequestClose}
+        onRequestClose={handleRequestClose}
       >
         <View style={styles.modalRootFill}>
-          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={handleDimPress}>
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={handleRequestClose}>
             <View style={styles.modalKeyboardAvoid}>
               <View
                 style={[
                   styles.modalCard,
-                  CARD_SHADOW,
+                  styles.shadow,
                   {
                     width: modalCardWidth,
                     paddingBottom: Math.max(insets.bottom, 20),
@@ -307,13 +252,7 @@ export default function ConceptQuestionsScreen({ route }: Props) {
                   <View style={styles.modalTitleSpacer} />
                   <TouchableOpacity
                     style={styles.modalCloseBtn}
-                    onPress={() => {
-                      if (showExitConfirm) {
-                        setShowExitConfirm(false);
-                        return;
-                      }
-                      handleCloseModal();
-                    }}
+                    onPress={handleRequestClose}
                     activeOpacity={0.7}
                   >
                     <Text style={styles.modalCloseBtnText}>×</Text>
@@ -362,7 +301,7 @@ export default function ConceptQuestionsScreen({ route }: Props) {
                 <View style={[StyleSheet.absoluteFillObject, styles.exitLayerDim]} />
               </TouchableWithoutFeedback>
               <View style={styles.exitLayerCenter} pointerEvents="box-none">
-                <View style={[styles.exitCard, CARD_SHADOW, { width: modalCardWidth, paddingBottom: Math.max(insets.bottom, 22) }]}>
+                <View style={[styles.exitCard, styles.shadow, { width: modalCardWidth, paddingBottom: Math.max(insets.bottom, 22) }]}>
                   <Text style={styles.exitTitle}>수정을 그만할까요?</Text>
                   <Text style={styles.exitSubtitle}>지금 나가면 수정한 내용이 사라져요.</Text>
                   <View style={styles.exitBtnRow}>
@@ -391,6 +330,13 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.bg,
+  },
+  shadow: {
+    shadowColor: "#8B6914",
+    shadowOffset: { width: 1, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 1.5,
+    elevation: 3,
   },
   scroll: {
     flex: 1,
@@ -425,7 +371,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 20,
     padding: 20,
-    ...CARD_SHADOW,
   },
   cardRow: {
     flexDirection: "row",
@@ -447,7 +392,7 @@ const styles = StyleSheet.create({
   sentenceWrap: {
     flexDirection: "row",
     alignItems: "baseline",
-    flexWrap: "nowrap", // 절대 줄바꿈 금지
+    flexWrap: "nowrap",
   },
   numberText: {
     fontSize: 12,
@@ -457,9 +402,9 @@ const styles = StyleSheet.create({
   questionText: {
     color: Colors.text,
     fontSize: 16,
-    fontFamily: "NanumSquareRound-Bold", // 폰트 변경
+    fontFamily: "NanumSquareRound-Bold",
     lineHeight: 24,
-    flexShrink: 0, // 질문은 잘리지 않게 보호
+    flexShrink: 0,
   },
   dashedUnderlineWrap: {
     marginLeft: 6,
@@ -475,16 +420,16 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: -2, // 답변 완료 실선(borderBottomWidth: 2)과 높이를 완벽하게 맞춤
+    bottom: -2,
     height: 2,
-    overflow: "hidden", // Path가 컨테이너를 넘어가지 않게 잘라냄
+    overflow: "hidden",
   },
   solidUnderlineWrap: {
     marginLeft: 6,
     borderBottomWidth: 2,
     borderBottomColor: Colors.accent,
     borderStyle: "solid",
-    flexShrink: 1, // 화면을 넘어가면 사이즈를 줄임
+    flexShrink: 1,
   },
   answerText: {
     fontSize: 16,
@@ -516,13 +461,12 @@ const styles = StyleSheet.create({
   modalRootFill: {
     flex: 1,
   },
-  /** Album.tsx `NewFolderModal`과 동일한 오버레이(딤 + 중앙 정렬) */
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(46,34,22,0.5)",
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 180, // 기존 120에서 180으로 변경
+    paddingBottom: 180,
   },
   modalKeyboardAvoid: {
     width: "100%",
