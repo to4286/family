@@ -83,8 +83,7 @@ function LogoutModal({ visible, onClose, onConfirm }: any) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
         <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-          <Text style={styles.modalTitle}>로그아웃</Text>
-          <Text style={styles.modalDesc}>정말 로그아웃 하시겠어요?</Text>
+          <Text style={[styles.modalTitle, { marginBottom: 28 }]}>로그아웃 하시겠습니까?</Text>
           <View style={styles.modalBtnRow}>
             <TouchableOpacity style={styles.modalCancelBtn} onPress={onClose}>
               <Text style={styles.modalCancelBtnText}>취소</Text>
@@ -201,6 +200,14 @@ export default function SettingsScreen() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
 
+  const handleLogout = () => {
+    setShowLogoutModal(false);
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "OnboardingStack" as never }],
+    });
+  };
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* AlbumDetail.tsx와 동일한 헤더 적용 */}
@@ -249,7 +256,11 @@ export default function SettingsScreen() {
       </ScrollView>
 
       {/* 모달 */}
-      <LogoutModal visible={showLogoutModal} onClose={() => setShowLogoutModal(false)} onConfirm={() => setShowLogoutModal(false)} />
+      <LogoutModal
+        visible={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+      />
       <WithdrawModal visible={showWithdrawModal} onClose={() => setShowWithdrawModal(false)} />
     </View>
   );
@@ -430,7 +441,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 13,
     borderRadius: 14,
-    backgroundColor: "#D4645A",
+    backgroundColor: Colors.accent,
     alignItems: "center",
   },
   modalConfirmBtnText: {
