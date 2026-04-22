@@ -74,7 +74,9 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               target: route.key,
               canPreventDefault: true,
             });
-            if (!isFocused && !event.defaultPrevented) {
+            if (isFocused) {
+              navigation.navigate(route.name, { refresh: Date.now() });
+            } else if (!event.defaultPrevented) {
               navigation.navigate(route.name);
             }
           };

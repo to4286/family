@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import type { CompositeNavigationProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -473,6 +473,7 @@ function PhotoSwiper({
 
 export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
+  const route = useRoute<any>();
   const insets = useSafeAreaInsets();
   const mainScrollRef = useRef<ScrollView>(null);
 
@@ -502,6 +503,13 @@ export default function HomeScreen() {
   );
 
   const currentPhotoIndex = photoIndices[selectedMemberId] ?? 0;
+
+  useEffect(() => {
+    const refresh = route.params?.refresh;
+    if (refresh === undefined) return;
+    mainScrollRef.current?.scrollTo({ y: 0, animated: true });
+    console.log("홈 화면 가족 데이터를 새로고침합니다...");
+  }, [route.params?.refresh]);
 
   useEffect(() => {
     const m = members.find((mm) => mm.id === selectedMemberId);

@@ -3,8 +3,8 @@ export type OnboardingStackParamList = {
 };
 
 export type MainTabParamList = {
-  Home: undefined;
-  Album: undefined;
+  Home: { refresh?: number } | undefined;
+  Album: { refresh?: number } | undefined;
   MyPage: undefined;
 };
 

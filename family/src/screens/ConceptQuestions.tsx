@@ -62,7 +62,7 @@ function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
 function MemoCapsule({ text }: { text: string }) {
   return (
     <View style={styles.memoCapsule}>
-      <Text style={styles.memoEmoji}>📌</Text>
+      <Text style={styles.memoEmoji}>✏️</Text>
       <Text style={styles.memoText} numberOfLines={1} ellipsizeMode="tail">
         {text}
       </Text>
@@ -90,7 +90,7 @@ function QuestionCard({ item, onPress }: { item: QuestionItem; onPress: (item: Q
                 </Text>
                 <View style={styles.svgDashContainer}>
                   <Svg width="100%" height="2">
-                    <Path d="M0 1 L300 1" stroke={Colors.textHint} strokeWidth="1.5" strokeDasharray="4 4" />
+                    <Path d="M0 1 L1000 1" stroke={Colors.textHint} strokeWidth="1.5" strokeDasharray="4 4" />
                   </Svg>
                 </View>
               </View>
@@ -406,9 +406,9 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   dashedUnderlineWrap: {
+    flex: 1,
     marginLeft: 6,
     position: "relative",
-    minWidth: 80,
   },
   transparentBlankText: {
     fontSize: 16,
@@ -424,17 +424,18 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   solidUnderlineWrap: {
+    flex: 1,
     marginLeft: 6,
     borderBottomWidth: 2,
     borderBottomColor: Colors.accent,
     borderStyle: "solid",
-    flexShrink: 1,
   },
   answerText: {
     fontSize: 16,
     fontFamily: "NanumSquareRound-ExtraBold",
     color: Colors.accent,
     lineHeight: 24,
+    textAlign: "center",
   },
   memoCapsule: {
     marginTop: 12,

@@ -12,10 +12,11 @@ import {
   Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors } from "../constants/colors";
-import type { MainTabStackParamList } from "../navigation/types";
+import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -42,17 +43,14 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const FOLDER_GAP = 14;
 const FOLDER_PADDING = 20;
 const FOLDER_SIZE = (SCREEN_WIDTH - FOLDER_PADDING * 2 - FOLDER_GAP) / 2;
-/** 홈 화면 헤더(알림 버튼 포함)와 동일한 최소 높이 */
 const HEADER_MIN_HEIGHT = 66;
 
-/** 폴더 카드 ⋯ 더보기 버튼(원형·터치 영역) */
 const FOLDER_MENU_BTN_SIZE = 32;
 const FOLDER_MENU_BTN_OFFSET = 12;
 const FOLDER_MENU_BTN_OVERLAY = "rgba(0,0,0,0.3)";
 const FOLDER_MENU_DOT_GAP = 3;
 const FOLDER_MENU_DOT_SIZE = 4;
 
-/** FolderMenuModal 바텀시트 slide (딤은 Modal fade) */
 const BOTTOM_SHEET_SLIDE_OFFSET = 300;
 const BOTTOM_SHEET_OPEN_MS = 250;
 const BOTTOM_SHEET_CLOSE_MS = 200;
@@ -75,6 +73,13 @@ function NewFolderModal({ visible, onClose, onCreate }: {
   onCreate: (name: string) => void;
 }) {
   const [name, setName] = useState("");
+
+  // 모달이 닫힐 때 입력 필드 초기화
+  useEffect(() => {
+    if (!visible) {
+      setName("");
+    }
+  }, [visible]);
 
   const handleCreate = () => {
     if (!name.trim()) return;
@@ -249,7 +254,17 @@ function DeleteConfirmModal({ visible, onClose, onDelete }: {
 export default function AlbumScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
+  const route = useRoute<RouteProp<MainTabParamList, "Album">>();
+  const scrollRef = useRef<ScrollView>(null);
   const [folders, setFolders] = useState<Folder[]>(INITIAL_FOLDERS);
+
+  useEffect(() => {
+    const refresh = route.params?.refresh;
+    if (refresh === undefined) return;
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    console.log("새로운 가족 데이터를 불러옵니다...");
+    setFolders(INITIAL_FOLDERS.map((f) => ({ ...f })));
+  }, [route.params?.refresh]);
 
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [menuFolder, setMenuFolder] = useState<Folder | null>(null);
@@ -289,6 +304,7 @@ export default function AlbumScreen() {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={styles.folderGrid}
         showsVerticalScrollIndicator={false}
@@ -376,8 +392,6 @@ export default function AlbumScreen() {
     </View>
   );
 }
-
-// ─── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   root: {
