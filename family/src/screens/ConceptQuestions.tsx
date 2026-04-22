@@ -144,7 +144,6 @@ export default function ConceptQuestionsScreen({ route }: Props) {
 
   const dismissModal = useCallback(() => {
     setIsModalVisible(false);
-    setShowExitConfirm(false);
   }, []);
 
   const handleCloseModal = useCallback(() => {
