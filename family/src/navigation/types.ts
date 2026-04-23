@@ -5,7 +5,7 @@ export type OnboardingStackParamList = {
 export type MainTabParamList = {
   Home: { refresh?: number } | undefined;
   Album: { refresh?: number } | undefined;
-  MyPage: undefined;
+  MyPage: { toastText?: string; toastIcon?: string; profileImageUri?: string } | undefined;
 };
 
 /** 탭 위에 알림 등 오버레이 화면을 올릴 때 사용하는 스택 */
@@ -18,8 +18,16 @@ export type MainTabStackParamList = {
     folderCount: number;
     folderMaxCount: number;
     folderCoverColor: string;
+    showDeleteToast?: boolean;
   };
-  AlbumDetail: { photoId: number };
+  AlbumDetail: {
+    photoId: number;
+    folderId: number;
+    folderName: string;
+    folderCount: number;
+    folderMaxCount: number;
+    folderCoverColor: string;
+  };
   ConceptCategories: { memberId: number; memberNickname: string };
   ConceptQuestions: {
     memberId: number;
@@ -36,6 +44,9 @@ export type MainTabStackParamList = {
     questionNumber: number;
     questionText: string;
   };
+  NicknameEdit: undefined;
+  ProfilePhotoEdit: undefined;
+  FamilyTypeEdit: undefined;
 };
 
 export type RootStackParamList = {

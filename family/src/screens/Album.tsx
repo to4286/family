@@ -271,6 +271,21 @@ export default function AlbumScreen() {
   const [renameFolder, setRenameFolder] = useState<Folder | null>(null);
   const [deleteFolder, setDeleteFolder] = useState<Folder | null>(null);
 
+  const [showToast, setShowToast] = useState(false);
+  const [toastContent, setToastContent] = useState({ icon: "", text: "" });
+  const toastAnim = useRef(new Animated.Value(300)).current;
+
+  const triggerToast = (icon: string, text: string) => {
+    setToastContent({ icon, text });
+    setShowToast(true);
+    Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    setTimeout(() => {
+      Animated.timing(toastAnim, { toValue: 300, duration: 300, useNativeDriver: true }).start(() =>
+        setShowToast(false)
+      );
+    }, 1500);
+  };
+
   const handleCreateFolder = (name: string) => {
     setFolders((prev) => [
       ...prev,
@@ -283,6 +298,7 @@ export default function AlbumScreen() {
       },
     ]);
     setShowNewFolder(false);
+    triggerToast("✅", "새 앨범이 만들어졌어요");
   };
 
   const handleRename = (name: string) => {
@@ -295,6 +311,7 @@ export default function AlbumScreen() {
     if (!deleteFolder) return;
     setFolders((prev) => prev.filter((f) => f.id !== deleteFolder.id));
     setDeleteFolder(null);
+    triggerToast("🗑️", "앨범이 삭제되었어요");
   };
 
   return (
@@ -306,13 +323,22 @@ export default function AlbumScreen() {
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
-        contentContainerStyle={styles.folderGrid}
+        contentContainerStyle={[styles.folderGrid, folders.length === 0 && styles.folderGridEmpty]}
         showsVerticalScrollIndicator={false}
       >
         {folders.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={{ fontSize: 40 }}>🖼️</Text>
-            <Text style={styles.emptyText}>아직 앨범이 없어요</Text>
+            <View style={styles.emptyTextBlock}>
+              <Text style={styles.emptyText}>아직 앨범이 없어요</Text>
+              <Text style={styles.emptyText}>가족과 함께한 추억을 등록해보세요</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.emptyCreateBtn}
+              activeOpacity={0.8}
+              onPress={() => setShowNewFolder(true)}
+            >
+              <Text style={styles.emptyCreateBtnText}>앨범 만들기</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.folderRow}>
@@ -389,6 +415,12 @@ export default function AlbumScreen() {
         onClose={() => setDeleteFolder(null)}
         onDelete={handleDelete}
       />
+      {showToast && (
+        <Animated.View style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}>
+          <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          <Text style={styles.toastText}>{toastContent.text}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -415,6 +447,9 @@ const styles = StyleSheet.create({
   folderGrid: {
     padding: FOLDER_PADDING,
     paddingBottom: 120,
+  },
+  folderGridEmpty: {
+    flexGrow: 1,
   },
   folderRow: {
     flexDirection: "row",
@@ -464,15 +499,32 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   emptyState: {
+    flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 80,
-    gap: 12,
+    justifyContent: "flex-start",
+    paddingTop: 200,
+  },
+  emptyTextBlock: {
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 16,
   },
   emptyText: {
-    fontSize: 14,
-    fontFamily: "Pretendard-Regular",
-    color: Colors.textHint,
+    fontSize: 16,
+    fontFamily: "NanumSquareRound-Regular",
+    color: Colors.textSub,
+    textAlign: "center",
+  },
+  emptyCreateBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: Colors.accent,
+  },
+  emptyCreateBtnText: {
+    fontSize: 13,
+    fontFamily: "Pretendard-Medium",
+    color: Colors.white,
   },
   fab: {
     position: "absolute",
@@ -614,5 +666,33 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: Colors.border,
     marginHorizontal: 24,
+  },
+  toastContainer: {
+    position: "absolute",
+    bottom: 130, // 플로팅 버튼(FAB) 위쪽으로 올라오도록 여유 있게 설정
+    left: 24,
+    right: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    backgroundColor: "rgba(46, 34, 22, 0.85)",
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 14,
+    zIndex: 999,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  toastIcon: {
+    fontSize: 20,
+  },
+  toastText: {
+    fontSize: 16,
+    fontFamily: "Pretendard-Medium",
+    color: "#FFFFFF",
   },
 });

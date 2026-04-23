@@ -13,11 +13,13 @@ import {
   Animated,
   Modal,
   ScrollView,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
+import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
 
 // --- 상수 및 데이터 ---
 const ROLES = [
@@ -287,7 +289,8 @@ function NicknameScreen({ onNext, nickname, setNickname }: any) {
   );
 }
 
-function ProfilePhotoScreen({ onNext, hasPhoto, setHasPhoto, showPhotoModal, setShowPhotoModal, onSelectAlbum, onTakePhoto, isLastStep }: any) {
+function ProfilePhotoScreen({ onNext, profileImage, showPhotoModal, setShowPhotoModal, onSelectAlbum, onTakePhoto, isLastStep }: any) {
+  const hasPhoto = profileImage != null;
   return (
     <View style={styles.screen}>
       <StepIndicator total={5} current={3} />
@@ -295,8 +298,17 @@ function ProfilePhotoScreen({ onNext, hasPhoto, setHasPhoto, showPhotoModal, set
       <Text style={[styles.screenSubtitle, { marginBottom: 48 }]}>가족들에게 보여질 사진이에요</Text>
       <View style={styles.photoSection}>
         <TouchableOpacity onPress={() => setShowPhotoModal(true)} activeOpacity={0.8}>
-          <View style={[styles.photoCircle, { backgroundColor: hasPhoto ? Colors.surface : Colors.bg, borderColor: hasPhoto ? Colors.accent : Colors.border }]}>
-            {hasPhoto ? <Text style={styles.photoEmoji}>🧒</Text> : <Text style={styles.photoPlusIcon}>+</Text>}
+          <View
+            style={[
+              styles.photoCircle,
+              { backgroundColor: hasPhoto ? Colors.surface : Colors.bg, borderColor: hasPhoto ? Colors.accent : Colors.border, overflow: "hidden" },
+            ]}
+          >
+            {hasPhoto && profileImage ? (
+              <Image source={{ uri: profileImage }} style={styles.profilePickImage} resizeMode="cover" />
+            ) : (
+              <Text style={styles.photoPlusIcon}>+</Text>
+            )}
           </View>
         </TouchableOpacity>
         <Text style={styles.photoHint}>터치해서 사진 선택</Text>
@@ -402,6 +414,7 @@ function FamilyTypeScreen({ onNext, selected, setSelected, customText, setCustom
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const { pickFromLibrary, pickFromCamera } = useStoryImagePicker();
   const [step, setStep] = useState(0);
   const [isJoiningByCode, setIsJoiningByCode] = useState(false);
 
@@ -409,7 +422,7 @@ export default function OnboardingScreen() {
   const [code, setCode] = useState("");
   const [role, setRole] = useState<number | null>(null);
   const [nickname, setNickname] = useState("");
-  const [hasPhoto, setHasPhoto] = useState(false);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [familyType, setFamilyType] = useState<number | null>(null);
   const [customFamilyType, setCustomFamilyType] = useState("");
@@ -440,17 +453,18 @@ export default function OnboardingScreen() {
         return (
           <ProfilePhotoScreen
             onNext={isJoiningByCode ? finish : next}
-            hasPhoto={hasPhoto}
-            setHasPhoto={setHasPhoto}
+            profileImage={profileImage}
             showPhotoModal={showPhotoModal}
             setShowPhotoModal={setShowPhotoModal}
-            onSelectAlbum={() => {
+            onSelectAlbum={async () => {
+              const uri = await pickFromLibrary();
               setShowPhotoModal(false);
-              setHasPhoto(true);
+              if (uri) setProfileImage(uri);
             }}
-            onTakePhoto={() => {
+            onTakePhoto={async () => {
+              const uri = await pickFromCamera();
               setShowPhotoModal(false);
-              setHasPhoto(true);
+              if (uri) setProfileImage(uri);
             }}
             isLastStep={isJoiningByCode}
           />
@@ -530,7 +544,7 @@ const styles = StyleSheet.create({
   inputCounter: { fontSize: 12, fontFamily: "Pretendard-Regular", color: Colors.textHint, textAlign: "right", marginTop: 6 },
   photoSection: { flex: 1, alignItems: "center", gap: 20 },
   photoCircle: { width: 120, height: 120, borderRadius: 60, borderWidth: 2, borderStyle: "dashed", alignItems: "center", justifyContent: "center" },
-  photoEmoji: { fontSize: 56 },
+  profilePickImage: { width: 120, height: 120 },
   photoPlusIcon: { fontSize: 60, color: Colors.textHint, fontWeight: "200", marginTop: -4 },
   photoHint: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.textHint },
   bottomSheetOverlay: { flex: 1, backgroundColor: "rgba(46,34,22,0.5)", justifyContent: "flex-end" },

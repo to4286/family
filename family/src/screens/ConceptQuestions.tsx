@@ -1,5 +1,6 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   View,
   Text,
   TouchableOpacity,
@@ -31,20 +32,7 @@ type QuestionItem = {
 };
 
 const MOCK_QUESTIONS: QuestionItem[] = [
-  { id: 3, question: "가장 좋아하는 계절은", status: "active" },
-  {
-    id: 2,
-    question: "요즘 즐겨 듣는 노래는",
-    answer: "잔잔한 클래식",
-    status: "answered",
-  },
-  {
-    id: 1,
-    question: "최근 가고 싶은 여행지는",
-    answer: "제주도",
-    memo: "저번에 통화하다가 나온 얘기, 흑돼지 먹고 싶다고 했음",
-    status: "answered",
-  },
+  { id: 1, question: "가장 좋아하는 계절은", status: "active" },
 ];
 
 const NEXT_ACTIVE_QUESTION_TEMPLATE = {
@@ -126,6 +114,24 @@ export default function ConceptQuestionsScreen({ route }: Props) {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
+  const [showToast, setShowToast] = useState(false);
+  const [toastContent, setToastContent] = useState({ icon: "", text: "" });
+  const toastAnim = useRef(new Animated.Value(300)).current;
+
+  const triggerToast = useCallback(
+    (icon: string, text: string) => {
+      setToastContent({ icon, text });
+      setShowToast(true);
+      Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+      setTimeout(() => {
+        Animated.timing(toastAnim, { toValue: 300, duration: 300, useNativeDriver: true }).start(() =>
+          setShowToast(false)
+        );
+      }, 1500);
+    },
+    [toastAnim]
+  );
+
   const visibleItems = useMemo(
     () =>
       [...questions]
@@ -198,7 +204,8 @@ export default function ConceptQuestionsScreen({ route }: Props) {
     });
 
     dismissModal();
-  }, [selectedItem, draftAnswer, draftMemo, dismissModal]);
+    triggerToast("✅", "정성스런 답변을 저장했어요");
+  }, [selectedItem, draftAnswer, draftMemo, dismissModal, triggerToast]);
 
   const hasDraftChanges =
     selectedItem != null &&
@@ -321,6 +328,13 @@ export default function ConceptQuestionsScreen({ route }: Props) {
           ) : null}
         </View>
       </Modal>
+
+      {showToast && (
+        <Animated.View style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}>
+          <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          <Text style={styles.toastText}>{toastContent.text}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -617,5 +631,33 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "NanumSquareRound-Bold",
     color: Colors.white,
+  },
+  toastContainer: {
+    position: "absolute",
+    bottom: 100, // 하단 탭바가 없는 화면이므로 살짝 아래로 조정
+    left: 24,
+    right: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    backgroundColor: "rgba(46, 34, 22, 0.85)",
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 14,
+    zIndex: 999,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  toastIcon: {
+    fontSize: 20,
+  },
+  toastText: {
+    fontSize: 16,
+    fontFamily: "Pretendard-Medium",
+    color: "#FFFFFF",
   },
 });

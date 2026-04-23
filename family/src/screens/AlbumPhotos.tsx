@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
+  Animated,
   View,
   Text,
   Image,
@@ -146,9 +147,45 @@ function PhotoGrid({ photos, onPhotoPress }: { photos: Photo[]; onPhotoPress: (p
 export default function AlbumPhotosScreen({ route }: Props) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
-  const { folderName, folderCount, folderMaxCount, folderCoverColor } = route.params;
+  const { folderId, folderName, folderCount, folderMaxCount, folderCoverColor } = route.params;
 
   const [heroPhoto] = useState<Photo | undefined>(() => pickRandomHeroPhoto(DUMMY_PHOTOS));
+
+  const [showToast, setShowToast] = useState(false);
+  const [toastContent, setToastContent] = useState({ icon: "", text: "" });
+  const toastAnim = useRef(new Animated.Value(300)).current;
+
+  const triggerToast = useCallback(
+    (icon: string, text: string) => {
+      setToastContent({ icon, text });
+      setShowToast(true);
+      Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+      setTimeout(() => {
+        Animated.timing(toastAnim, { toValue: 300, duration: 300, useNativeDriver: true }).start(() =>
+          setShowToast(false)
+        );
+      }, 1500);
+    },
+    [toastAnim]
+  );
+
+  const toAlbumDetailParams = useCallback(
+    (photoId: number) => ({
+      photoId,
+      folderId,
+      folderName,
+      folderCount,
+      folderMaxCount,
+      folderCoverColor,
+    }),
+    [folderId, folderName, folderCount, folderMaxCount, folderCoverColor]
+  );
+
+  useEffect(() => {
+    if (!route.params?.showDeleteToast) return;
+    triggerToast("🗑️", "사진이 삭제되었습니다");
+    navigation.setParams({ showDeleteToast: undefined });
+  }, [route.params?.showDeleteToast, navigation, triggerToast]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -170,7 +207,7 @@ export default function AlbumPhotosScreen({ route }: Props) {
           activeOpacity={0.9}
           onPress={() => {
             if (heroPhoto) {
-              navigation.navigate("AlbumDetail", { photoId: heroPhoto.id });
+              navigation.navigate("AlbumDetail", toAlbumDetailParams(heroPhoto.id));
             }
           }}
         >
@@ -187,13 +224,20 @@ export default function AlbumPhotosScreen({ route }: Props) {
 
         <PhotoGrid
           photos={DUMMY_PHOTOS}
-          onPhotoPress={(p) => navigation.navigate("AlbumDetail", { photoId: p.id })}
+          onPhotoPress={(p) => navigation.navigate("AlbumDetail", toAlbumDetailParams(p.id))}
         />
       </ScrollView>
 
       <TouchableOpacity style={styles.fab} onPress={() => {}} activeOpacity={0.85}>
         <Text style={styles.fabText}>+ 사진 추가</Text>
       </TouchableOpacity>
+
+      {showToast && (
+        <Animated.View style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}>
+          <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          <Text style={styles.toastText}>{toastContent.text}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -250,4 +294,32 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   fabText: { fontSize: 14, fontFamily: "Pretendard-Medium", color: Colors.white },
+  toastContainer: {
+    position: "absolute",
+    bottom: 130,
+    left: 24,
+    right: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    backgroundColor: "rgba(46, 34, 22, 0.85)",
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 14,
+    zIndex: 999,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  toastIcon: {
+    fontSize: 20,
+  },
+  toastText: {
+    fontSize: 16,
+    fontFamily: "Pretendard-Medium",
+    color: "#FFFFFF",
+  },
 });

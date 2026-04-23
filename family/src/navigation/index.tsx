@@ -17,6 +17,9 @@ import ConceptCategoriesScreen from "../screens/ConceptCategories";
 import ConceptQuestionsScreen from "../screens/ConceptQuestions";
 import ConceptAnswerScreen from "../screens/ConceptAnswer";
 import SettingsScreen from "../screens/Settings";
+import NicknameEditScreen from "../screens/NicknameEditScreen";
+import ProfilePhotoEditScreen from "../screens/ProfilePhotoEditScreen";
+import FamilyTypeEditScreen from "../screens/FamilyTypeEditScreen";
 
 import { Colors } from "../constants/colors";
 
@@ -196,6 +199,9 @@ function MainTabStackNavigator() {
       <MainTabStack.Screen name="ConceptCategories" component={ConceptCategoriesScreen} options={{ headerShown: false }} />
       <MainTabStack.Screen name="ConceptQuestions" component={ConceptQuestionsScreen} options={{ headerShown: false }} />
       <MainTabStack.Screen name="ConceptAnswer" component={ConceptAnswerScreen} options={{ headerShown: false }} />
+      <MainTabStack.Screen name="NicknameEdit" component={NicknameEditScreen} options={{ headerShown: false }} />
+      <MainTabStack.Screen name="ProfilePhotoEdit" component={ProfilePhotoEditScreen} options={{ headerShown: false }} />
+      <MainTabStack.Screen name="FamilyTypeEdit" component={FamilyTypeEditScreen} options={{ headerShown: false }} />
     </MainTabStack.Navigator>
   );
 }

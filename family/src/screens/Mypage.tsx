@@ -11,9 +11,15 @@ import {
   Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RouteProp } from "@react-navigation/native";
+import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
+
+/** 탭 바 점유 높이(대략값) — 토스트를 탭바 위에 두기 위함 */
+const BOTTOM_TAB_BAR_OFFSET = 52;
 
 // HomeScreen.tsx의 스타일 상수를 그대로 적용하여 일관성 유지
 const CARD_SURFACE_SHADOW = {
@@ -98,8 +104,37 @@ function ProfileMenuModal({
 
 export default function MypageScreen() {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<any>();
+  const route = useRoute<RouteProp<MainTabParamList, "MyPage">>();
+  const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  const [showToast, setShowToast] = useState(false);
+  const [toastContent, setToastContent] = useState({ icon: "", text: "" });
+  const toastAnim = useRef(new Animated.Value(300)).current;
+
+  const [profilePhotoUri, setProfilePhotoUri] = useState("https://i.pravatar.cc/150?img=33");
+
+  useEffect(() => {
+    if (route.params?.profileImageUri) {
+      setProfilePhotoUri(route.params.profileImageUri);
+      navigation.setParams({ profileImageUri: undefined } as never);
+    }
+  }, [route.params?.profileImageUri, navigation]);
+
+  useEffect(() => {
+    const text = route.params?.toastText;
+    if (!text) return;
+    setToastContent({ icon: route.params?.toastIcon ?? "✅", text });
+    setShowToast(true);
+    Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    const t = setTimeout(() => {
+      Animated.timing(toastAnim, { toValue: 300, duration: 300, useNativeDriver: true }).start(() =>
+        setShowToast(false)
+      );
+    }, 1500);
+    navigation.setParams({ toastText: undefined, toastIcon: undefined } as never);
+    return () => clearTimeout(t);
+  }, [route.params?.toastText, route.params?.toastIcon, navigation, toastAnim]);
 
   const handleCopyCode = () => {
     Alert.alert("알림", "초대 코드가 복사되었습니다!");
@@ -112,7 +147,7 @@ export default function MypageScreen() {
         <Text style={styles.headerTitle}>마이페이지</Text>
         <TouchableOpacity
           style={styles.settingsBtn}
-          onPress={() => navigation.navigate("Settings")}
+          onPress={() => (navigation as { navigate: (n: "Settings") => void }).navigate("Settings")}
           activeOpacity={0.85}
         >
           <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -132,10 +167,7 @@ export default function MypageScreen() {
         <View style={[styles.card, styles.sectionCard]}>
           <Text style={styles.sectionTitle}>내 정보</Text>
           <View style={styles.profileRow}>
-            <Image
-              source={{ uri: "https://i.pravatar.cc/150?img=33" }}
-              style={styles.profileImageRow}
-            />
+            <Image source={{ uri: profilePhotoUri }} style={styles.profileImageRow} resizeMode="cover" />
             <View style={styles.profileInfo}>
               <Text style={styles.nicknameText}>민준</Text>
               <View style={styles.typeBadgeRow}>
@@ -165,7 +197,11 @@ export default function MypageScreen() {
             </View>
           </View>
           <View style={styles.divider} />
-          <TouchableOpacity style={styles.listItem} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.listItem}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate("FamilyTypeEdit")}
+          >
             <Text style={styles.listLabel}>가족 유형 변경</Text>
             <View style={styles.listValueRow}>
               <Text style={styles.listValue}>대화가 많은 우리 가족 🏡</Text>
@@ -199,13 +235,28 @@ export default function MypageScreen() {
         onClose={() => setShowProfileMenu(false)}
         onChangePhoto={() => {
           setShowProfileMenu(false);
-          /* 사진 변경 로직 */
+          navigation.navigate("ProfilePhotoEdit");
         }}
         onChangeNickname={() => {
           setShowProfileMenu(false);
-          /* 닉네임 변경 로직 */
+          navigation.navigate("NicknameEdit");
         }}
       />
+
+      {showToast && (
+        <Animated.View
+          style={[
+            styles.toastContainer,
+            {
+              bottom: insets.bottom + BOTTOM_TAB_BAR_OFFSET,
+              transform: [{ translateY: toastAnim }],
+            },
+          ]}
+        >
+          <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          <Text style={styles.toastText}>{toastContent.text}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -388,4 +439,20 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.border,
     opacity: 0.5,
   },
+  toastContainer: {
+    position: "absolute",
+    left: 24,
+    right: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    backgroundColor: "rgba(46, 34, 22, 0.85)",
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    gap: 14,
+    zIndex: 999,
+  },
+  toastIcon: { fontSize: 20 },
+  toastText: { fontSize: 16, fontFamily: "Pretendard-Medium", color: "#FFFFFF" },
 });

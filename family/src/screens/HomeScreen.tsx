@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   Dimensions,
   FlatList,
   Image,
@@ -18,6 +19,8 @@ import type { CompositeNavigationProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors } from "../constants/colors";
+import { STORY_PHOTO_ASPECT_RATIO } from "../constants/storyPhoto";
+import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
 import CommentSheet from "../components/CommentSheet";
 import type { Comment } from "../components/CommentSheet";
 import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
@@ -57,9 +60,7 @@ const MEMBERS: Member[] = [
     isMine: true,
     currentMood: 2,
     photoUri: "https://i.pravatar.cc/150?img=33",
-    photos: [
-      { id: 1, imageUri: "https://picsum.photos/seed/me1/400/400", uploadedAt: "1시간 전" },
-    ],
+    photos: [],
     hasUpdate: false,
   },
   {
@@ -68,9 +69,10 @@ const MEMBERS: Member[] = [
     isMine: false,
     currentMood: 1,
     photoUri: "https://i.pravatar.cc/150?img=12",
+    /** id는 시간순으로 증가(오래됨=작은 id, 최신=큰 id) — lastSeen·미시청 비교에 사용 */
     photos: [
-      { id: 101, imageUri: "https://picsum.photos/seed/dad1/400/400", uploadedAt: "2시간 전" },
-      { id: 102, imageUri: "https://picsum.photos/seed/dad2/400/400", uploadedAt: "3시간 전" },
+      { id: 101, imageUri: "https://picsum.photos/seed/dad2/400/400", uploadedAt: "3시간 전" },
+      { id: 102, imageUri: "https://picsum.photos/seed/dad1/400/400", uploadedAt: "2시간 전" },
     ],
     hasUpdate: true,
   },
@@ -81,9 +83,9 @@ const MEMBERS: Member[] = [
     currentMood: 2,
     photoUri: "https://i.pravatar.cc/150?img=68",
     photos: [
-      { id: 301, imageUri: "https://picsum.photos/seed/jisu1/400/400", uploadedAt: "12시간 전" },
+      { id: 301, imageUri: "https://picsum.photos/seed/jisu3/400/400", uploadedAt: "14시간 전" },
       { id: 302, imageUri: "https://picsum.photos/seed/jisu2/400/400", uploadedAt: "13시간 전" },
-      { id: 303, imageUri: "https://picsum.photos/seed/jisu3/400/400", uploadedAt: "14시간 전" },
+      { id: 303, imageUri: "https://picsum.photos/seed/jisu1/400/400", uploadedAt: "12시간 전" },
     ],
     hasUpdate: true,
   },
@@ -130,11 +132,13 @@ const MOODS = [
   { icon: "⛈️", label: "힘들어" },
 ];
 
-const TODAY_MEMORY = {
-  id: 1,
-  imageUri: "https://picsum.photos/600/400",
-  date: "2024.08.15",
+type TodayMemoryData = {
+  id: number;
+  imageUri: string;
+  date: string;
 };
+
+const TODAY_MEMORY: TodayMemoryData | null = null;
 
 const PROFILE_SIZE = 64;
 const PROFILE_GAP = 12;
@@ -173,6 +177,19 @@ function sortMembersForDisplay(list: Member[], updatesMap: Record<number, boolea
   return [...mine, ...withUpdates, ...withoutUpdates];
 }
 
+/**
+ * `photos`는 [가장 오래됨, …, 가장 최신] (스와이프로 오른쪽으로 갈수록 최신)
+ * @param lastSeenId 마지막으로 본 사진 id. `undefined`면 기록 없음 → 맨 끝(최신)에서 시작
+ * @returns 첫 미시청 슬롯 index. 전부 봤거나 볼 것 없으면 `photos.length - 1`
+ */
+function findFirstUnreadIndex(photos: MemberPhoto[], lastSeenId: number | undefined): number {
+  if (photos.length === 0) return 0;
+  if (lastSeenId === undefined) return photos.length - 1;
+  const i = photos.findIndex((p) => p.id > lastSeenId);
+  if (i === -1) return photos.length - 1;
+  return i;
+}
+
 // ─── Presentational pieces (재사용) ────────────────────────────────────────────
 
 function UploadTimeBadge({ time }: { time: string }) {
@@ -201,16 +218,32 @@ function RoundIconButton({
   );
 }
 
-function TodayMemoryCard() {
+function TodayMemoryCard({ memory }: { memory: TodayMemoryData | null }) {
+  const navigation = useNavigation<HomeScreenNavigationProp>();
+
   return (
     <View style={styles.todayMemory}>
       <Text style={styles.todayTitle}>오늘의 추억</Text>
-      <TouchableOpacity style={styles.todayImageWrapper} activeOpacity={0.9} onPress={() => {}}>
-        <Image source={{ uri: TODAY_MEMORY.imageUri }} style={styles.todayImage} resizeMode="cover" />
-        <View style={styles.todayDateBadge} pointerEvents="none">
-          <Text style={styles.todayDateText}>{TODAY_MEMORY.date}</Text>
+
+      {memory ? (
+        <TouchableOpacity style={styles.todayImageWrapper} activeOpacity={0.9} onPress={() => {}}>
+          <Image source={{ uri: memory.imageUri }} style={styles.todayImage} resizeMode="cover" />
+          <View style={styles.todayDateBadge} pointerEvents="none">
+            <Text style={styles.todayDateText}>{memory.date}</Text>
+          </View>
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.todayEmptyWrapper}>
+          <Text style={styles.todayEmptyText}>가족과 함께한 추억을 등록해보세요</Text>
+          <TouchableOpacity
+            style={styles.todayEmptyBtn}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate("Album")}
+          >
+            <Text style={styles.todayEmptyBtnText}>앨범으로 이동</Text>
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -341,6 +374,7 @@ function InstagramIndicator({ total, currentIndex }: { total: number; currentInd
 }
 
 type PhotoSwiperProps = {
+  memberId: number;
   photos: MemberPhoto[];
   currentIndex: number;
   onIndexChange: (index: number) => void;
@@ -348,9 +382,12 @@ type PhotoSwiperProps = {
   nickname: string;
   onCommentPress: (photoId: number) => void;
   commentCounts: Record<number, number>;
+  onPoke: () => void;
+  onAddPhoto?: () => void;
 };
 
 function PhotoSwiper({
+  memberId,
   photos,
   currentIndex,
   onIndexChange,
@@ -358,17 +395,19 @@ function PhotoSwiper({
   nickname,
   onCommentPress,
   commentCounts,
+  onPoke,
+  onAddPhoto,
 }: PhotoSwiperProps) {
   const flatListRef = useRef<FlatList<MemberPhoto>>(null);
 
-  useEffect(() => {
-    if (flatListRef.current && photos.length > 0) {
-      const safeIndex = Math.min(currentIndex, photos.length - 1);
-      flatListRef.current.scrollToIndex({ index: safeIndex, animated: false });
-    }
-    // 구성원 전환 시(photos 변경)에만 스크롤 동기화 — currentIndex 변경(스와이프)마다 실행되면 충돌
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- photos만: 멤버 전환 시에만 scrollToIndex
-  }, [photos]);
+  useLayoutEffect(() => {
+    if (photos.length === 0) return;
+    const safe = Math.max(0, Math.min(currentIndex, photos.length - 1));
+    const raf = requestAnimationFrame(() => {
+      flatListRef.current?.scrollToIndex({ index: safe, animated: false });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [photos, currentIndex, memberId]);
 
   const onMomentumScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -383,9 +422,17 @@ function PhotoSwiper({
     if (isMine) {
       return (
         <View style={styles.emptyPhotoSelf}>
-          <Text style={styles.emptyPhotoPlus}>+</Text>
-          <Text style={styles.emptyPhotoCaption}>가족들에게 일상을 공유해보세요</Text>
-          <Text style={styles.emptyPhotoHint}>사진은 24시간이 지나면 사라집니다</Text>
+          <View style={{ alignItems: "center", gap: 6 }}>
+            <Text style={styles.emptyPhotoCaption}>가족들에게 일상을 공유해보세요</Text>
+            <Text style={styles.emptyPhotoCaption}>사진은 24시간이 지나면 사라집니다</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.emptyPhotoBtn}
+            activeOpacity={0.8}
+            onPress={() => onAddPhoto?.()}
+          >
+            <Text style={styles.emptyPhotoBtnText}>사진 추가하기</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -394,7 +441,7 @@ function PhotoSwiper({
         <Text style={styles.emptyPhotoOtherText}>
           {nickname}님은 지금 무엇을 하고 있을까요?
         </Text>
-        <TouchableOpacity style={styles.pokeBtn} activeOpacity={0.9} onPress={() => {}}>
+        <TouchableOpacity style={styles.pokeBtn} activeOpacity={0.9} onPress={onPoke}>
           <Text style={styles.pokeBtnText}>콕 찌르기 👈</Text>
         </TouchableOpacity>
       </View>
@@ -403,6 +450,7 @@ function PhotoSwiper({
 
   return (
     <View>
+      {/* photos[0] = 이전(왼쪽), 끝 = 최신(오른쪽) — 가로 스와이프로 '이어보기' */}
       <FlatList
         ref={flatListRef}
         style={{ width: PHOTO_WIDTH }}
@@ -451,7 +499,7 @@ function PhotoSwiper({
               {isMine && (
                 <TouchableOpacity
                   style={styles.addPhotoBtn}
-                  onPress={() => {}}
+                  onPress={() => onAddPhoto?.()}
                   activeOpacity={0.85}
                 >
                   <Text style={styles.addPhotoBtnText}>+</Text>
@@ -485,17 +533,71 @@ export default function HomeScreen() {
   );
 
   const [photoIndices, setPhotoIndices] = useState<Record<number, number>>({});
+  const [lastSeenPhotoIds, setLastSeenPhotoIds] = useState<Record<number, number>>({});
 
   const [showComments, setShowComments] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastContent, setToastContent] = useState({ icon: "✅", text: "기분이 변경되었어요" });
+  const toastAnim = useRef(new Animated.Value(100)).current;
+
+  const triggerToast = (icon: string, text: string) => {
+    setToastContent({ icon, text });
+    setShowToast(true);
+    Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    setTimeout(() => {
+      Animated.timing(toastAnim, { toValue: 100, duration: 300, useNativeDriver: true }).start(() =>
+        setShowToast(false)
+      );
+    }, 1500);
+  };
+
   const [commentPhotoId, setCommentPhotoId] = useState<number | null>(null);
   const [comments, setComments] = useState<Record<number, Comment[]>>(DUMMY_COMMENTS);
 
-  const [sortedMembers, setSortedMembers] = useState<Member[]>(() =>
-    sortMembersForDisplay(
-      MEMBERS,
-      Object.fromEntries(MEMBERS.map((m) => [m.id, m.isMine ? false : m.hasUpdate]))
-    )
+  const { pickFromLibrary } = useStoryImagePicker();
+
+  const sortedMembers = useMemo(
+    () => sortMembersForDisplay(members, updates),
+    [members, updates]
   );
+
+  const handleAddMyPhoto = useCallback(async () => {
+    const uri = await pickFromLibrary();
+    if (!uri) return;
+    const newPhoto: MemberPhoto = { id: Date.now(), imageUri: uri, uploadedAt: "방금 전" };
+    setMembers((prev) =>
+      prev.map((m) => (m.isMine ? { ...m, photos: [...m.photos, newPhoto] } : m))
+    );
+    const me = members.find((m) => m.isMine);
+    if (me) {
+      const lastIdx = me.photos.length;
+      setPhotoIndices((prev) => ({ ...prev, [me.id]: lastIdx }));
+      setLastSeenPhotoIds((prev) => ({ ...prev, [me.id]: newPhoto.id }));
+    }
+  }, [pickFromLibrary, members]);
+
+  const handlePhotoViewChange = useCallback(
+    (idx: number) => {
+      const m = members.find((x) => x.id === selectedMemberId);
+      if (!m?.photos[idx]) return;
+      const pid = m.photos[idx].id;
+      setPhotoIndices((prev) => ({ ...prev, [selectedMemberId]: idx }));
+      setLastSeenPhotoIds((prev) => ({ ...prev, [selectedMemberId]: pid }));
+    },
+    [selectedMemberId, members]
+  );
+
+  /** 구성원 탭 전환 시에만: 첫 미시청(또는 최신) 슬롯으로 이어보기 — lastSeen/stale 루프 방지를 위해 deps는 memberId만 */
+  useLayoutEffect(() => {
+    const m = members.find((x) => x.id === selectedMemberId);
+    if (!m || m.photos.length === 0) return;
+    const lastSeen = lastSeenPhotoIds[selectedMemberId];
+    const nextIdx = findFirstUnreadIndex(m.photos, lastSeen);
+    const pid = m.photos[nextIdx].id;
+    setPhotoIndices((prev) => ({ ...prev, [selectedMemberId]: nextIdx }));
+    setLastSeenPhotoIds((prev) => ({ ...prev, [selectedMemberId]: pid }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 멤버 전환 시점의 시청 기록만 읽고, 스와이프로 갱신된 lastSeen에 반응하지 않음
+  }, [selectedMemberId]);
 
   const selectedMember = useMemo(
     () => members.find((m) => m.id === selectedMemberId),
@@ -522,6 +624,7 @@ export default function HomeScreen() {
     setMembers((prev) =>
       prev.map((m) => (m.id === selectedMemberId ? { ...m, currentMood: selectedMood } : m))
     );
+    triggerToast("✅", "기분이 변경되었어요");
   };
 
   const handleOpenComments = (photoId: number) => {
@@ -633,30 +736,33 @@ export default function HomeScreen() {
                   />
                   <View style={styles.sectionDivider} />
                   <PhotoSwiper
+                    memberId={selectedMemberId}
                     photos={selectedMember.photos}
                     currentIndex={currentPhotoIndex}
-                    onIndexChange={(idx) =>
-                      setPhotoIndices((prev) => ({ ...prev, [selectedMemberId]: idx }))
-                    }
+                    onIndexChange={handlePhotoViewChange}
                     isMine
                     nickname={selectedMember.nickname}
                     onCommentPress={handleOpenComments}
                     commentCounts={commentCounts}
+                    onPoke={() => {}}
+                    onAddPhoto={handleAddMyPhoto}
                   />
                 </>
               ) : (
                 <>
                   <OtherMoodReadOnly moodIndex={selectedMember.currentMood} />
                   <PhotoSwiper
+                    memberId={selectedMemberId}
                     photos={selectedMember.photos}
                     currentIndex={currentPhotoIndex}
-                    onIndexChange={(idx) =>
-                      setPhotoIndices((prev) => ({ ...prev, [selectedMemberId]: idx }))
-                    }
+                    onIndexChange={handlePhotoViewChange}
                     isMine={false}
                     nickname={selectedMember.nickname}
                     onCommentPress={handleOpenComments}
                     commentCounts={commentCounts}
+                    onPoke={() =>
+                      triggerToast("👈", `${selectedMember.nickname}님을 콕 찔렀어요`)
+                    }
                   />
                   <TouchableOpacity
                     style={styles.learnMoreBtn}
@@ -678,7 +784,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        <TodayMemoryCard />
+        <TodayMemoryCard memory={TODAY_MEMORY} />
       </ScrollView>
 
       {(() => {
@@ -695,6 +801,16 @@ export default function HomeScreen() {
           />
         );
       })()}
+
+      {/* 토스트 메시지 (캡슐형 디자인) */}
+      {showToast && (
+        <Animated.View
+          style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}
+        >
+          <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          <Text style={styles.toastText}>{toastContent.text}</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -977,17 +1093,13 @@ const styles = StyleSheet.create({
 
   emptyPhotoSelf: {
     width: "100%",
-    aspectRatio: 4 / 3,
+    aspectRatio: STORY_PHOTO_ASPECT_RATIO,
     borderRadius: 16,
     backgroundColor: Colors.surface,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
-  },
-  emptyPhotoPlus: {
-    fontSize: 32,
-    color: Colors.textHint,
-    marginBottom: 8,
+    gap: 16,
   },
   emptyPhotoCaption: {
     fontSize: 13,
@@ -995,17 +1107,21 @@ const styles = StyleSheet.create({
     color: Colors.textSub,
     textAlign: "center",
   },
-  emptyPhotoHint: {
-    fontSize: 11,
-    fontFamily: "NanumSquareRound-Regular",
-    color: Colors.textHint,
-    textAlign: "center",
-    marginTop: 6,
+  emptyPhotoBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: Colors.accent,
+  },
+  emptyPhotoBtnText: {
+    fontSize: 13,
+    fontFamily: "Pretendard-Medium",
+    color: Colors.white,
   },
 
   emptyPhotoOther: {
     width: "100%",
-    aspectRatio: 4 / 3,
+    aspectRatio: STORY_PHOTO_ASPECT_RATIO,
     borderRadius: 16,
     backgroundColor: Colors.surface,
     alignItems: "center",
@@ -1085,5 +1201,57 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Pretendard-Regular",
     color: Colors.white,
+  },
+  todayEmptyWrapper: {
+    height: 200,
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+  },
+  todayEmptyText: {
+    fontSize: 14,
+    fontFamily: "NanumSquareRound-Regular",
+    color: Colors.textSub,
+  },
+  todayEmptyBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: Colors.accent,
+  },
+  todayEmptyBtnText: {
+    fontSize: 13,
+    fontFamily: "Pretendard-Medium",
+    color: Colors.white,
+  },
+  toastContainer: {
+    position: "absolute",
+    bottom: 130,
+    left: 24, // 화면 양옆으로 뻗도록 좌측 여백 고정
+    right: 24, // 화면 양옆으로 뻗도록 우측 여백 고정
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start", // 왼쪽 정렬!
+    backgroundColor: "rgba(46, 34, 22, 0.85)",
+    paddingVertical: 18,
+    paddingHorizontal: 24, // 왼쪽 정렬 시 시작 여백
+    borderRadius: 12,
+    gap: 14, // 이모티콘과 텍스트 사이 간격 유지
+    zIndex: 999,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  toastIcon: {
+    fontSize: 20,
+  },
+  toastText: {
+    fontSize: 16,
+    fontFamily: "Pretendard-Medium",
+    color: "#FFFFFF", // 진한 배경에 맞춰 흰색 텍스트로 변경
   },
 });

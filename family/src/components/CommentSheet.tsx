@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Colors } from "../constants/colors";
+import { STORY_PHOTO_ASPECT_RATIO } from "../constants/storyPhoto";
 
 export type Comment = {
   id: number;
@@ -210,7 +211,7 @@ const styles = StyleSheet.create({
   },
   photoPreview: {
     width: "100%",
-    aspectRatio: 4 / 3,
+    aspectRatio: STORY_PHOTO_ASPECT_RATIO,
     borderRadius: 16,
   },
   sheet: {

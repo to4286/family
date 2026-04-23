@@ -25,18 +25,15 @@ type Category = {
   iconBg: string;
   answeredCount: number;
   totalCount: number;
-  unlocked: boolean;
 };
 
 const CATEGORIES: Category[] = [
-  { id: 1, level: 1, name: "일상", emoji: "☀️", iconBg: "#FFF3E8", answeredCount: 3, totalCount: 10, unlocked: true },
-  { id: 2, level: 2, name: "취향", emoji: "🎵", iconBg: "#FEF0E6", answeredCount: 0, totalCount: 10, unlocked: false },
-  { id: 3, level: 3, name: "추억", emoji: "📷", iconBg: "#FAE8D5", answeredCount: 0, totalCount: 10, unlocked: false },
-  { id: 4, level: 4, name: "생각", emoji: "💭", iconBg: "#F0D9C4", answeredCount: 0, totalCount: 10, unlocked: false },
-  { id: 5, level: 5, name: "마음", emoji: "💛", iconBg: "#E8C9A0", answeredCount: 0, totalCount: 10, unlocked: false },
+  { id: 1, level: 1, name: "일상", emoji: "☀️", iconBg: "#FFF3E8", answeredCount: 1, totalCount: 10 },
+  { id: 2, level: 2, name: "취향", emoji: "🎵", iconBg: "#FEF0E6", answeredCount: 1, totalCount: 10 },
+  { id: 3, level: 3, name: "추억", emoji: "📷", iconBg: "#FAE8D5", answeredCount: 1, totalCount: 10 },
+  { id: 4, level: 4, name: "생각", emoji: "💭", iconBg: "#F0D9C4", answeredCount: 1, totalCount: 10 },
+  { id: 5, level: 5, name: "마음", emoji: "💛", iconBg: "#E8C9A0", answeredCount: 1, totalCount: 10 },
 ];
-
-const CAT_ICON_LOCKED_BG = "#EBE6E1";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -83,10 +80,9 @@ export default function ConceptCategoriesScreen({ route }: Props) {
         {CATEGORIES.map((cat) => (
           <TouchableOpacity
             key={cat.id}
-            style={[styles.catCard, !cat.unlocked && styles.catCardLocked]}
-            activeOpacity={cat.unlocked ? 0.85 : 1}
+            style={styles.catCard}
+            activeOpacity={0.85}
             onPress={() => {
-              if (!cat.unlocked) return;
               navigation.navigate("ConceptQuestions", {
                 memberId,
                 memberNickname,
@@ -96,33 +92,21 @@ export default function ConceptCategoriesScreen({ route }: Props) {
               });
             }}
           >
-            <View
-              style={[
-                styles.catIconWrap,
-                { backgroundColor: cat.unlocked ? cat.iconBg : CAT_ICON_LOCKED_BG },
-              ]}
-            >
-              <Text style={styles.catIconEmoji}>{cat.unlocked ? cat.emoji : "🔒"}</Text>
+            <View style={[styles.catIconWrap, { backgroundColor: cat.iconBg }]}>
+              <Text style={styles.catIconEmoji}>{cat.emoji}</Text>
             </View>
 
             <View style={styles.catInfo}>
               <View style={styles.catLevelRow}>
-                <Text style={[styles.catLevel, !cat.unlocked && { color: Colors.textHint }]}>
-                  Chapter {cat.level}
-                </Text>
-                <Text style={[styles.catName, !cat.unlocked && { color: Colors.textHint }]}>{cat.name}</Text>
+                <Text style={styles.catLevel}>Chapter {cat.level}</Text>
+                <Text style={styles.catName}>{cat.name}</Text>
               </View>
-              {!cat.unlocked && (
-                <Text style={styles.catLockHint}>
-                  Chapter {cat.level - 1}을 모두 답변하면 열려요
-                </Text>
-              )}
             </View>
 
             <View style={styles.catRight}>
-              {cat.unlocked && (
-                <Text style={styles.catProgress}>{cat.answeredCount}/{cat.totalCount}</Text>
-              )}
+              <Text style={styles.catProgress}>
+                {cat.answeredCount}/{cat.totalCount}
+              </Text>
               <Text style={styles.catChevron}>›</Text>
             </View>
           </TouchableOpacity>
@@ -179,10 +163,6 @@ const styles = StyleSheet.create({
     shadowRadius: 1.5,
     elevation: 3,
   },
-  catCardLocked: {
-    opacity: 0.5,
-    backgroundColor: Colors.white,
-  },
   catIconWrap: {
     width: 48,
     height: 48,
@@ -210,12 +190,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: "NanumSquareRound-ExtraBold",
     color: Colors.text,
-  },
-  catLockHint: {
-    fontSize: 12,
-    fontFamily: "Pretendard-Regular",
-    color: Colors.textHint,
-    marginTop: 4,
   },
   catRight: {
     flexDirection: "row",
