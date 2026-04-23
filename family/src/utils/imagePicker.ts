@@ -1,12 +1,10 @@
 import { Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { STORY_PHOTO_ASPECT } from "../constants/storyPhoto";
 
-/** 갤러리/카메라 공통: `STORY_PHOTO_ASPECT`와 홈 `photoImage` 정렬, 원본 품질에 가깝게 */
+/** 갤러리/카메라 공통: 네이티브 자르기 UI 없이 원본 반환. 4:3 프레이밍은 홈 `photoImage` 등 UI에서 `resizeMode`+`aspectRatio`로 처리 */
 const BASE_OPTIONS: ImagePicker.ImagePickerOptions = {
   mediaTypes: ["images"],
-  allowsEditing: true,
-  aspect: STORY_PHOTO_ASPECT,
+  allowsEditing: false,
   quality: 1,
 };
 

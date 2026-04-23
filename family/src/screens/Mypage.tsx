@@ -17,9 +17,7 @@ import type { RouteProp } from "@react-navigation/native";
 import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
-
-/** 탭 바 점유 높이(대략값) — 토스트를 탭바 위에 두기 위함 */
-const BOTTOM_TAB_BAR_OFFSET = 52;
+import { TOAST_ANIM_MS, TOAST_CONTAINER_BOTTOM, TOAST_DISPLAY_MS, TOAST_SLIDE_OFFSCREEN_PX } from "../constants/toastUI";
 
 // HomeScreen.tsx의 스타일 상수를 그대로 적용하여 일관성 유지
 const CARD_SURFACE_SHADOW = {
@@ -110,7 +108,7 @@ export default function MypageScreen() {
 
   const [showToast, setShowToast] = useState(false);
   const [toastContent, setToastContent] = useState({ icon: "", text: "" });
-  const toastAnim = useRef(new Animated.Value(300)).current;
+  const toastAnim = useRef(new Animated.Value(TOAST_SLIDE_OFFSCREEN_PX)).current;
 
   const [profilePhotoUri, setProfilePhotoUri] = useState("https://i.pravatar.cc/150?img=33");
 
@@ -124,17 +122,26 @@ export default function MypageScreen() {
   useEffect(() => {
     const text = route.params?.toastText;
     if (!text) return;
+
     setToastContent({ icon: route.params?.toastIcon ?? "✅", text });
     setShowToast(true);
-    Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    Animated.timing(toastAnim, { toValue: 0, duration: TOAST_ANIM_MS, useNativeDriver: true }).start();
+
     const t = setTimeout(() => {
-      Animated.timing(toastAnim, { toValue: 300, duration: 300, useNativeDriver: true }).start(() =>
-        setShowToast(false)
-      );
-    }, 1500);
-    navigation.setParams({ toastText: undefined, toastIcon: undefined } as never);
+      Animated.timing(toastAnim, {
+        toValue: TOAST_SLIDE_OFFSCREEN_PX,
+        duration: TOAST_ANIM_MS,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowToast(false);
+        navigation.setParams({ toastText: undefined, toastIcon: undefined } as never);
+      });
+    }, TOAST_DISPLAY_MS);
+
     return () => clearTimeout(t);
-  }, [route.params?.toastText, route.params?.toastIcon, navigation, toastAnim]);
+    // 토스트 트리거는 toastText만 구독 — 조기 setParams로 타이머가 끊기지 않게 위에서 처리
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- params 초기화는 퇴장 애니 끝에서만
+  }, [route.params?.toastText]);
 
   const handleCopyCode = () => {
     Alert.alert("알림", "초대 코드가 복사되었습니다!");
@@ -245,13 +252,7 @@ export default function MypageScreen() {
 
       {showToast && (
         <Animated.View
-          style={[
-            styles.toastContainer,
-            {
-              bottom: insets.bottom + BOTTOM_TAB_BAR_OFFSET,
-              transform: [{ translateY: toastAnim }],
-            },
-          ]}
+          style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}
         >
           <Text style={styles.toastIcon}>{toastContent.icon}</Text>
           <Text style={styles.toastText}>{toastContent.text}</Text>
@@ -441,6 +442,7 @@ const styles = StyleSheet.create({
   },
   toastContainer: {
     position: "absolute",
+    bottom: TOAST_CONTAINER_BOTTOM,
     left: 24,
     right: 24,
     flexDirection: "row",
@@ -452,6 +454,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 14,
     zIndex: 999,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
   },
   toastIcon: { fontSize: 20 },
   toastText: { fontSize: 16, fontFamily: "Pretendard-Medium", color: "#FFFFFF" },

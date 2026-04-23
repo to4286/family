@@ -20,9 +20,17 @@ import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors } from "../constants/colors";
 import { STORY_PHOTO_ASPECT_RATIO } from "../constants/storyPhoto";
+import {
+  TOAST_ANIM_MS,
+  TOAST_CONTAINER_BOTTOM,
+  TOAST_DISPLAY_MS,
+  TOAST_SLIDE_OFFSCREEN_PX,
+  TOAST_STORY_UPLOADED,
+} from "../constants/toastUI";
 import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
 import CommentSheet from "../components/CommentSheet";
 import type { Comment } from "../components/CommentSheet";
+import PhotoSelectionModal from "../components/PhotoSelectionModal";
 import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -536,45 +544,62 @@ export default function HomeScreen() {
   const [lastSeenPhotoIds, setLastSeenPhotoIds] = useState<Record<number, number>>({});
 
   const [showComments, setShowComments] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastContent, setToastContent] = useState({ icon: "✅", text: "기분이 변경되었어요" });
-  const toastAnim = useRef(new Animated.Value(100)).current;
+  const toastAnim = useRef(new Animated.Value(TOAST_SLIDE_OFFSCREEN_PX)).current;
 
-  const triggerToast = (icon: string, text: string) => {
+  const triggerToast = useCallback((icon: string, text: string) => {
     setToastContent({ icon, text });
     setShowToast(true);
-    Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start();
+    Animated.timing(toastAnim, { toValue: 0, duration: TOAST_ANIM_MS, useNativeDriver: true }).start();
     setTimeout(() => {
-      Animated.timing(toastAnim, { toValue: 100, duration: 300, useNativeDriver: true }).start(() =>
-        setShowToast(false)
+      Animated.timing(toastAnim, { toValue: TOAST_SLIDE_OFFSCREEN_PX, duration: TOAST_ANIM_MS, useNativeDriver: true }).start(
+        () => setShowToast(false)
       );
-    }, 1500);
-  };
+    }, TOAST_DISPLAY_MS);
+  }, [toastAnim]);
 
   const [commentPhotoId, setCommentPhotoId] = useState<number | null>(null);
   const [comments, setComments] = useState<Record<number, Comment[]>>(DUMMY_COMMENTS);
 
-  const { pickFromLibrary } = useStoryImagePicker();
+  const { pickFromLibrary, pickFromCamera } = useStoryImagePicker();
 
   const sortedMembers = useMemo(
     () => sortMembersForDisplay(members, updates),
     [members, updates]
   );
 
-  const handleAddMyPhoto = useCallback(async () => {
+  const handleAddPhotoSuccess = useCallback(
+    (uri: string) => {
+      const newPhoto: MemberPhoto = { id: Date.now(), imageUri: uri, uploadedAt: "방금 전" };
+      setMembers((prev) =>
+        prev.map((m) => (m.isMine ? { ...m, photos: [...m.photos, newPhoto] } : m))
+      );
+      const me = members.find((m) => m.isMine);
+      if (me) {
+        const lastIdx = me.photos.length;
+        setPhotoIndices((prev) => ({ ...prev, [me.id]: lastIdx }));
+        setLastSeenPhotoIds((prev) => ({ ...prev, [me.id]: newPhoto.id }));
+      }
+      triggerToast(TOAST_STORY_UPLOADED.icon, TOAST_STORY_UPLOADED.text);
+    },
+    [members, triggerToast]
+  );
+
+  const handleOpenPhotoModal = useCallback(() => {
+    setShowPhotoModal(true);
+  }, []);
+
+  const handleSelectAlbum = useCallback(async () => {
     const uri = await pickFromLibrary();
-    if (!uri) return;
-    const newPhoto: MemberPhoto = { id: Date.now(), imageUri: uri, uploadedAt: "방금 전" };
-    setMembers((prev) =>
-      prev.map((m) => (m.isMine ? { ...m, photos: [...m.photos, newPhoto] } : m))
-    );
-    const me = members.find((m) => m.isMine);
-    if (me) {
-      const lastIdx = me.photos.length;
-      setPhotoIndices((prev) => ({ ...prev, [me.id]: lastIdx }));
-      setLastSeenPhotoIds((prev) => ({ ...prev, [me.id]: newPhoto.id }));
-    }
-  }, [pickFromLibrary, members]);
+    if (uri) handleAddPhotoSuccess(uri);
+  }, [pickFromLibrary, handleAddPhotoSuccess]);
+
+  const handleTakePhoto = useCallback(async () => {
+    const uri = await pickFromCamera();
+    if (uri) handleAddPhotoSuccess(uri);
+  }, [pickFromCamera, handleAddPhotoSuccess]);
 
   const handlePhotoViewChange = useCallback(
     (idx: number) => {
@@ -745,7 +770,7 @@ export default function HomeScreen() {
                     onCommentPress={handleOpenComments}
                     commentCounts={commentCounts}
                     onPoke={() => {}}
-                    onAddPhoto={handleAddMyPhoto}
+                    onAddPhoto={handleOpenPhotoModal}
                   />
                 </>
               ) : (
@@ -801,6 +826,13 @@ export default function HomeScreen() {
           />
         );
       })()}
+
+      <PhotoSelectionModal
+        visible={showPhotoModal}
+        onClose={() => setShowPhotoModal(false)}
+        onSelectAlbum={handleSelectAlbum}
+        onTakePhoto={handleTakePhoto}
+      />
 
       {/* 토스트 메시지 (캡슐형 디자인) */}
       {showToast && (
@@ -1228,7 +1260,7 @@ const styles = StyleSheet.create({
   },
   toastContainer: {
     position: "absolute",
-    bottom: 130,
+    bottom: TOAST_CONTAINER_BOTTOM,
     left: 24, // 화면 양옆으로 뻗도록 좌측 여백 고정
     right: 24, // 화면 양옆으로 뻗도록 우측 여백 고정
     flexDirection: "row",

@@ -1,14 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  StyleSheet,
-  Modal,
-  Animated,
-  Image,
-} from "react-native";
+import { View, Text, TouchableOpacity, TouchableWithoutFeedback, StyleSheet, Modal, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -16,10 +7,7 @@ import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import type { MainTabStackParamList } from "../navigation/types";
 import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
-
-const BOTTOM_SHEET_SLIDE_OFFSET = 300;
-const BOTTOM_SHEET_OPEN_MS = 250;
-const BOTTOM_SHEET_CLOSE_MS = 200;
+import PhotoSelectionModal from "../components/PhotoSelectionModal";
 
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -38,56 +26,6 @@ function BtnPrimary({ label, onPress, disabled = false }: { label: string; onPre
     >
       <Text style={styles.btnPrimaryText}>{label}</Text>
     </TouchableOpacity>
-  );
-}
-
-function PhotoSelectionModal({
-  visible,
-  onClose,
-  onSelectAlbum,
-  onTakePhoto,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onSelectAlbum: () => void;
-  onTakePhoto: () => void;
-}) {
-  const insets = useSafeAreaInsets();
-  const slideAnim = useRef(new Animated.Value(BOTTOM_SHEET_SLIDE_OFFSET)).current;
-  useEffect(() => {
-    if (visible) {
-      slideAnim.setValue(BOTTOM_SHEET_SLIDE_OFFSET);
-      Animated.timing(slideAnim, { toValue: 0, duration: BOTTOM_SHEET_OPEN_MS, useNativeDriver: true }).start();
-    }
-  }, [visible, slideAnim]);
-  const handleClose = () => {
-    Animated.timing(slideAnim, {
-      toValue: BOTTOM_SHEET_SLIDE_OFFSET,
-      duration: BOTTOM_SHEET_CLOSE_MS,
-      useNativeDriver: true,
-    }).start(() => onClose());
-  };
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <TouchableOpacity style={styles.bottomSheetOverlay} activeOpacity={1} onPress={handleClose}>
-        <Animated.View
-          style={[
-            styles.bottomSheet,
-            { paddingBottom: insets.bottom + 12, transform: [{ translateY: slideAnim }] },
-          ]}
-          onStartShouldSetResponder={() => true}
-        >
-          <View style={styles.bottomSheetHandle} />
-          <TouchableOpacity style={styles.bottomSheetItem} onPress={onSelectAlbum} activeOpacity={0.7}>
-            <Text style={styles.bottomSheetItemText}>사진에서 선택</Text>
-          </TouchableOpacity>
-          <View style={styles.bottomSheetDivider} />
-          <TouchableOpacity style={styles.bottomSheetItem} onPress={onTakePhoto} activeOpacity={0.7}>
-            <Text style={styles.bottomSheetItemText}>직접 찍기</Text>
-          </TouchableOpacity>
-        </Animated.View>
-      </TouchableOpacity>
-    </Modal>
   );
 }
 
@@ -174,7 +112,6 @@ export default function ProfilePhotoEditScreen() {
           onClose={() => setShowPhotoModal(false)}
           onSelectAlbum={async () => {
             const uri = await pickFromLibrary();
-            setShowPhotoModal(false);
             if (uri) {
               setImageUri(uri);
               setIsChanged(true);
@@ -182,7 +119,6 @@ export default function ProfilePhotoEditScreen() {
           }}
           onTakePhoto={async () => {
             const uri = await pickFromCamera();
-            setShowPhotoModal(false);
             if (uri) {
               setImageUri(uri);
               setIsChanged(true);
@@ -259,12 +195,6 @@ const styles = StyleSheet.create({
   photoHint: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.textHint },
   btnPrimary: { paddingVertical: 16, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   btnPrimaryText: { fontSize: 16, fontFamily: "Pretendard-Medium", color: Colors.white },
-  bottomSheetOverlay: { flex: 1, backgroundColor: "rgba(46,34,22,0.5)", justifyContent: "flex-end" },
-  bottomSheet: { backgroundColor: Colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 12 },
-  bottomSheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.border, alignSelf: "center", marginBottom: 8 },
-  bottomSheetItem: { paddingVertical: 18, paddingHorizontal: 24, alignItems: "center" },
-  bottomSheetItemText: { fontSize: 16, fontFamily: "Pretendard-Medium", color: Colors.text },
-  bottomSheetDivider: { height: StyleSheet.hairlineWidth, backgroundColor: Colors.border, marginHorizontal: 24 },
   exitLayerRoot: { zIndex: 50 },
   exitLayerDim: { backgroundColor: "rgba(0, 0, 0, 0.35)" },
   exitLayerCenter: {
