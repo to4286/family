@@ -15,6 +15,7 @@ import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-n
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import type { MainTabStackParamList } from "../navigation/types";
+import { handleMultipleImagePick } from "../utils/imagePicker";
 
 type Props = NativeStackScreenProps<MainTabStackParamList, "AlbumPhotos">;
 
@@ -169,6 +170,13 @@ export default function AlbumPhotosScreen({ route }: Props) {
     [toastAnim]
   );
 
+  const handleAddPhotos = async () => {
+    const uris = await handleMultipleImagePick();
+    if (uris && uris.length > 0) {
+      triggerToast("✅", `${uris.length}장의 사진이 추가되었어요`);
+    }
+  };
+
   const toAlbumDetailParams = useCallback(
     (photoId: number) => ({
       photoId,
@@ -228,7 +236,7 @@ export default function AlbumPhotosScreen({ route }: Props) {
         />
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => {}} activeOpacity={0.85}>
+      <TouchableOpacity style={styles.fab} onPress={handleAddPhotos} activeOpacity={0.85}>
         <Text style={styles.fabText}>+ 사진 추가</Text>
       </TouchableOpacity>
 

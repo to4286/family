@@ -14,7 +14,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "userInterfaceStyle": "light"
+      "userInterfaceStyle": "light",
+      "infoPlist": {
+        "CFBundleDevelopmentRegion": "ko_KR",
+        "CFBundleAllowMixedLocalizations": true
+      }
     },
     "android": {
       "adaptiveIcon": {
