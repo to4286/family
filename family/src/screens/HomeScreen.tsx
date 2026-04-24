@@ -29,6 +29,7 @@ import {
   TOAST_STORY_UPLOADED,
 } from "../constants/toastUI";
 import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
+import CheckCircleIcon from "../components/CheckCircleIcon";
 import CommentSheet from "../components/CommentSheet";
 import type { Comment } from "../components/CommentSheet";
 import PhotoSelectionModal from "../components/PhotoSelectionModal";
@@ -890,7 +891,13 @@ export default function HomeScreen() {
         <Animated.View
           style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}
         >
-          <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          {toastContent.icon === "✅" ? (
+            <View style={{ marginRight: 0 }}>
+              <CheckCircleIcon width={20} height={20} />
+            </View>
+          ) : (
+            <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          )}
           <Text style={styles.toastText}>{toastContent.text}</Text>
         </Animated.View>
       )}

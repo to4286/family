@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
+import CheckCircleIcon from "../components/CheckCircleIcon";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import type { MainTabStackParamList } from "../navigation/types";
@@ -331,7 +332,13 @@ export default function ConceptQuestionsScreen({ route }: Props) {
 
       {showToast && (
         <Animated.View style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}>
-          <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          {toastContent.icon === "✅" ? (
+            <View style={{ marginRight: 0 }}>
+              <CheckCircleIcon width={20} height={20} />
+            </View>
+          ) : (
+            <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          )}
           <Text style={styles.toastText}>{toastContent.text}</Text>
         </Animated.View>
       )}

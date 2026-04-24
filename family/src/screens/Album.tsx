@@ -17,6 +17,7 @@ import type { RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors } from "../constants/colors";
 import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
+import CheckCircleIcon from "../components/CheckCircleIcon";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -413,7 +414,13 @@ export default function AlbumScreen() {
       />
       {showToast && (
         <Animated.View style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}>
-          <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          {toastContent.icon === "✅" ? (
+            <View style={{ marginRight: 0 }}>
+              <CheckCircleIcon width={20} height={20} />
+            </View>
+          ) : (
+            <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          )}
           <Text style={styles.toastText}>{toastContent.text}</Text>
         </Animated.View>
       )}

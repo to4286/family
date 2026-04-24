@@ -15,6 +15,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
+import CheckCircleIcon from "../components/CheckCircleIcon";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import { TOAST_ANIM_MS, TOAST_CONTAINER_BOTTOM, TOAST_DISPLAY_MS, TOAST_SLIDE_OFFSCREEN_PX } from "../constants/toastUI";
@@ -254,7 +255,13 @@ export default function MypageScreen() {
         <Animated.View
           style={[styles.toastContainer, { transform: [{ translateY: toastAnim }] }]}
         >
-          <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          {toastContent.icon === "✅" ? (
+            <View style={{ marginRight: 0 }}>
+              <CheckCircleIcon width={20} height={20} />
+            </View>
+          ) : (
+            <Text style={styles.toastIcon}>{toastContent.icon}</Text>
+          )}
           <Text style={styles.toastText}>{toastContent.text}</Text>
         </Animated.View>
       )}
