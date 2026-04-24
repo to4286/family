@@ -236,7 +236,12 @@ export default function SettingsScreen() {
           </View>
           {!notifAllowed && (
             <View style={styles.notifOverlay}>
-              <Text style={styles.overlayIcon}>🔔</Text>
+              <Svg width={40} height={40} viewBox="0 0 24 24" fill="none" style={styles.overlayIcon}>
+                <Path
+                  d="M8.35206 20.242C8.78721 20.7922 9.34171 21.2364 9.97367 21.541C10.6056 21.8455 11.2985 22.0025 12.0001 22C12.7016 22.0025 13.3945 21.8455 14.0264 21.541C14.6584 21.2364 15.2129 20.7922 15.6481 20.242C13.2271 20.5697 10.773 20.5697 8.35206 20.242ZM18.7501 9V9.704C18.7501 10.549 18.9901 11.375 19.4421 12.078L20.5501 13.801C21.5611 15.375 20.7891 17.514 19.0301 18.011C14.4338 19.3127 9.56635 19.3127 4.97006 18.011C3.21106 17.514 2.43906 15.375 3.45006 13.801L4.55806 12.078C5.01127 11.3692 5.25178 10.5453 5.25106 9.704V9C5.25106 5.134 8.27306 2 12.0001 2C15.7271 2 18.7501 5.134 18.7501 9Z"
+                  fill={Colors.accent}
+                />
+              </Svg>
               <Text style={styles.overlayTitle}>알림이 허용되지 않았어요</Text>
               <Text style={styles.overlayDesc}>알림을 받으려면{"\n"}알림 권한을 허용해주세요</Text>
               <TouchableOpacity style={styles.overlayBtn} onPress={() => setNotifAllowed(true)} activeOpacity={0.8}>

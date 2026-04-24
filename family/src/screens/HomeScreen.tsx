@@ -5,6 +5,7 @@ import {
   FlatList,
   Image,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -14,7 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { CompositeNavigationProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -73,7 +74,7 @@ const MEMBERS: Member[] = [
   },
   {
     id: 1,
-    nickname: "김철수",
+    nickname: "아빠김철",
     isMine: false,
     currentMood: 1,
     photoUri: "https://i.pravatar.cc/150?img=12",
@@ -86,7 +87,7 @@ const MEMBERS: Member[] = [
   },
   {
     id: 4,
-    nickname: "지수",
+    nickname: "막내딸지수",
     isMine: false,
     currentMood: 2,
     photoUri: "https://i.pravatar.cc/150?img=68",
@@ -99,7 +100,7 @@ const MEMBERS: Member[] = [
   },
   {
     id: 2,
-    nickname: "이영희",
+    nickname: "우리엄마영희",
     isMine: false,
     currentMood: 0,
     photoUri: "https://i.pravatar.cc/150?img=47",
@@ -529,7 +530,6 @@ function PhotoSwiper({
 
 export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
-  const route = useRoute<any>();
   const insets = useSafeAreaInsets();
   const mainScrollRef = useRef<ScrollView>(null);
 
@@ -563,12 +563,39 @@ export default function HomeScreen() {
   const [commentPhotoId, setCommentPhotoId] = useState<number | null>(null);
   const [comments, setComments] = useState<Record<number, Comment[]>>(DUMMY_COMMENTS);
 
+  const route = useRoute<RouteProp<MainTabParamList, "Home">>();
+
+  useEffect(() => {
+    const params = route.params as
+      | {
+          selectedMemberId?: number;
+          openCommentPhotoId?: number;
+        }
+      | undefined;
+
+    if (params?.selectedMemberId) {
+      setSelectedMemberId(params.selectedMemberId);
+      setUpdates((prev) => ({ ...prev, [params.selectedMemberId!]: false }));
+    }
+
+    if (params?.openCommentPhotoId) {
+      setTimeout(() => {
+        setCommentPhotoId(params.openCommentPhotoId!);
+        setShowComments(true);
+      }, 300);
+    }
+  }, [route.params]);
+
   const { pickFromLibrary, pickFromCamera } = useStoryImagePicker();
 
-  const sortedMembers = useMemo(
-    () => sortMembersForDisplay(members, updates),
-    [members, updates]
+  const sortedMembersRef = useRef<Member[]>(
+    sortMembersForDisplay(
+      MEMBERS,
+      Object.fromEntries(MEMBERS.map((m) => [m.id, m.isMine ? false : m.hasUpdate]))
+    )
   );
+
+  const sortedMembers = sortedMembersRef.current;
 
   const handleAddPhotoSuccess = useCallback(
     (uri: string) => {
@@ -644,6 +671,16 @@ export default function HomeScreen() {
       setSelectedMood(m.currentMood ?? 2);
     }
   }, [selectedMemberId, members]);
+
+  const handleInvite = useCallback(async () => {
+    try {
+      await Share.share({
+        message: `"${FAMILY_TITLE}"에 초대할게요!\n\n가족 코드: ABC123\n\n앱을 설치하고 위 코드를 입력해주세요.\nhttps://family.app/download`,
+      });
+    } catch (e) {
+      // 사용자가 공유 취소한 경우 무시
+    }
+  }, []);
 
   const handleSaveMood = () => {
     setMembers((prev) =>
@@ -741,12 +778,26 @@ export default function HomeScreen() {
                       resizeMode="cover"
                     />
                   </View>
-                  <Text style={styles.profileNickname} numberOfLines={1}>
+                  <Text
+                    style={[
+                      styles.profileNickname,
+                    ]}
+                  >
                     {m.isMine ? "나" : m.nickname}
                   </Text>
                 </TouchableOpacity>
               );
             })}
+            <TouchableOpacity
+              style={styles.inviteBtn}
+              onPress={handleInvite}
+              activeOpacity={0.85}
+            >
+              <View style={styles.inviteIconWrap}>
+                <Text style={styles.inviteIconText}>+</Text>
+              </View>
+              <Text style={styles.inviteLabel}>초대하기</Text>
+            </TouchableOpacity>
           </ScrollView>
 
           {selectedMember && (
@@ -905,9 +956,9 @@ const styles = StyleSheet.create({
   },
   profileItem: {
     alignItems: "center",
-    width: PROFILE_SIZE + 24,
+    minWidth: PROFILE_SIZE + 24,
     paddingVertical: 8,
-    paddingHorizontal: 20,
+    paddingHorizontal: 14,
     borderRadius: 20,
     backgroundColor: "transparent",
   },
@@ -923,7 +974,10 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   profileImageWrapHasUpdate: {
-    borderWidth: 2.5,
+    width: PROFILE_SIZE + 10,
+    height: PROFILE_SIZE + 10,
+    borderRadius: (PROFILE_SIZE + 10) / 2,
+    borderWidth: 3,
     borderColor: Colors.accent,
   },
   profileImage: {
@@ -938,7 +992,36 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginTop: 4,
     textAlign: "center",
-    maxWidth: 80,
+  },
+  inviteBtn: {
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+  },
+  inviteIconWrap: {
+    width: PROFILE_SIZE + 6,
+    height: PROFILE_SIZE + 6,
+    borderRadius: (PROFILE_SIZE + 6) / 2,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.surface,
+  },
+  inviteIconText: {
+    fontSize: 28,
+    color: Colors.textHint,
+    lineHeight: 30,
+  },
+  inviteLabel: {
+    fontSize: 14,
+    fontFamily: "NanumSquareRound-Bold",
+    color: Colors.textHint,
+    marginTop: 4,
+    textAlign: "center",
+    maxWidth: 100,
   },
   sectionDivider: {
     height: 1,

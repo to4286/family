@@ -33,11 +33,7 @@ type Folder = {
 
 const FOLDER_COLORS = ["#D4B896", "#C9A882", "#E8C9A0", "#B89878", "#DDBF9A"];
 
-const INITIAL_FOLDERS: Folder[] = [
-  { id: 1, name: "2024 가족 여행", count: 12, maxCount: 20, coverColor: "#D4B896" },
-  { id: 2, name: "일상 기록", count: 8, maxCount: 20, coverColor: "#C9A882" },
-  { id: 3, name: "생일 파티 🎂", count: 5, maxCount: 20, coverColor: "#E8C9A0" },
-];
+const INITIAL_FOLDERS: Folder[] = [];
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const FOLDER_GAP = 14;

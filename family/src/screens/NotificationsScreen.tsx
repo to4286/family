@@ -23,6 +23,11 @@ export type NotificationItem = {
   emoji: string | null;
   /** 댓글 썸네일 자리 표시 색상 (추후 photoSource + Image로 교체) */
   photoColor: string | null;
+  memberId: number | null;
+  photoId: number | null;
+  folderId: number | null;
+  folderName: string | null;
+  folderCoverColor: string | null;
 };
 
 type NavigationProp = NativeStackNavigationProp<MainTabStackParamList>;
@@ -53,6 +58,11 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     read: false,
     emoji: null,
     photoColor: null,
+    memberId: 1,
+    photoId: null,
+    folderId: null,
+    folderName: null,
+    folderCoverColor: null,
   },
   {
     id: 2,
@@ -64,6 +74,11 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     read: false,
     emoji: null,
     photoColor: null,
+    memberId: 5,
+    photoId: null,
+    folderId: null,
+    folderName: null,
+    folderCoverColor: null,
   },
   {
     id: 3,
@@ -75,6 +90,11 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     read: false,
     emoji: "👩",
     photoColor: null,
+    memberId: 3,
+    photoId: 1,
+    folderId: null,
+    folderName: null,
+    folderCoverColor: null,
   },
   {
     id: 4,
@@ -86,6 +106,11 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     read: false,
     emoji: null,
     photoColor: null,
+    memberId: 1,
+    photoId: null,
+    folderId: null,
+    folderName: null,
+    folderCoverColor: null,
   },
   {
     id: 5,
@@ -97,6 +122,11 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     read: true,
     emoji: null,
     photoColor: null,
+    memberId: 4,
+    photoId: null,
+    folderId: null,
+    folderName: null,
+    folderCoverColor: null,
   },
   {
     id: 6,
@@ -108,6 +138,11 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     read: true,
     emoji: "🧒",
     photoColor: null,
+    memberId: 3,
+    photoId: 1,
+    folderId: null,
+    folderName: null,
+    folderCoverColor: null,
   },
   {
     id: 7,
@@ -119,6 +154,11 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     read: true,
     emoji: null,
     photoColor: null,
+    memberId: 2,
+    photoId: null,
+    folderId: null,
+    folderName: null,
+    folderCoverColor: null,
   },
   {
     id: 8,
@@ -130,6 +170,11 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     read: true,
     emoji: "👨",
     photoColor: "#C9A882",
+    memberId: 1,
+    photoId: 101,
+    folderId: 1,
+    folderName: "2024 가족 여행",
+    folderCoverColor: "#D4B896",
   },
   {
     id: 9,
@@ -141,6 +186,11 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     read: true,
     emoji: null,
     photoColor: null,
+    memberId: 4,
+    photoId: null,
+    folderId: null,
+    folderName: null,
+    folderCoverColor: null,
   },
   {
     id: 10,
@@ -152,6 +202,11 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     read: true,
     emoji: null,
     photoColor: null,
+    memberId: null,
+    photoId: null,
+    folderId: null,
+    folderName: null,
+    folderCoverColor: null,
   },
 ];
 
@@ -215,6 +270,52 @@ export default function NotificationsScreen() {
     );
   }, []);
 
+  const handleNotifPress = useCallback(
+    (notif: NotificationItem) => {
+      markRead(notif.id);
+
+      switch (notif.type) {
+        case "mood":
+        case "story":
+        case "member":
+          navigation.navigate("MainTab" as any, {
+            screen: "Home",
+            params: { selectedMemberId: notif.memberId },
+          });
+          break;
+
+        case "poke":
+          navigation.navigate("MainTab" as any, {
+            screen: "Home",
+            params: { selectedMemberId: 3 },
+          });
+          break;
+
+        case "story_comment":
+          navigation.navigate("MainTab" as any, {
+            screen: "Home",
+            params: {
+              selectedMemberId: notif.memberId,
+              openCommentPhotoId: notif.photoId,
+            },
+          });
+          break;
+
+        case "comment":
+        case "album":
+          if (notif.photoId !== null) {
+            navigation.navigate("AlbumDetail", { photoId: notif.photoId } as any);
+          }
+          break;
+
+        case "notice":
+          navigation.navigate("NoticeDetail" as any);
+          break;
+      }
+    },
+    [markRead, navigation]
+  );
+
   const rootPadding = useMemo(
     () => ({
       paddingTop: insets.top,
@@ -274,7 +375,7 @@ export default function NotificationsScreen() {
           notifications.map((notif) => (
             <Pressable
               key={notif.id}
-              onPress={() => markRead(notif.id)}
+              onPress={() => handleNotifPress(notif)}
               style={({ pressed }) => [
                 styles.row,
                 { backgroundColor: notif.read ? Colors.white : Colors.accentLight },

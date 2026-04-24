@@ -19,7 +19,7 @@ import { handleMultipleImagePick } from "../utils/imagePicker";
 
 type Props = NativeStackScreenProps<MainTabStackParamList, "AlbumPhotos">;
 
-// ─── Data (임시) ───────────────────────────────────────────────────────────────
+// ─── Photo model & palette ─────────────────────────────────────────────────────
 
 type Photo = {
   id: number;
@@ -28,23 +28,7 @@ type Photo = {
   uploadedAt: string;
 };
 
-const DUMMY_PHOTOS: Photo[] = [
-  { id: 1, color: "#D4B896", uploadedAt: "2일 전" },
-  { id: 2, color: "#C9A882", uploadedAt: "3일 전" },
-  { id: 3, color: "#E8C9A0", uploadedAt: "4일 전" },
-  { id: 4, color: "#B89878", uploadedAt: "5일 전" },
-  { id: 5, color: "#DDBF9A", uploadedAt: "6일 전" },
-  { id: 6, color: "#C4A87E", uploadedAt: "7일 전" },
-  { id: 7, color: "#E0C8A8", uploadedAt: "8일 전" },
-  { id: 8, color: "#BFA080", uploadedAt: "9일 전" },
-  { id: 9, color: "#D8BC94", uploadedAt: "10일 전" },
-];
-
-function pickRandomHeroPhoto(photos: Photo[]): Photo | undefined {
-  if (photos.length === 0) return undefined;
-  const randomIndex = Math.floor(Math.random() * photos.length);
-  return photos[randomIndex];
-}
+const PHOTO_COLORS = ["#D4B896", "#C9A882", "#E8C9A0", "#B89878", "#DDBF9A", "#C4A87E", "#E0C8A8", "#BFA080", "#D8BC94"];
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GRID_GAP = 3;
@@ -150,7 +134,8 @@ export default function AlbumPhotosScreen({ route }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
   const { folderId, folderName, folderCount, folderMaxCount, folderCoverColor } = route.params;
 
-  const [heroPhoto] = useState<Photo | undefined>(() => pickRandomHeroPhoto(DUMMY_PHOTOS));
+  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [heroPhoto, setHeroPhoto] = useState<Photo | undefined>(undefined);
 
   const [showToast, setShowToast] = useState(false);
   const [toastContent, setToastContent] = useState({ icon: "", text: "" });
@@ -171,15 +156,30 @@ export default function AlbumPhotosScreen({ route }: Props) {
   );
 
   const handleAddPhotos = async () => {
-    const uris = await handleMultipleImagePick();
-    if (uris && uris.length > 0) {
-      triggerToast("✅", `${uris.length}장의 사진이 추가되었어요`);
+    const pickedAssets = await handleMultipleImagePick();
+    if (pickedAssets && pickedAssets.length > 0) {
+      const newPhotos: Photo[] = pickedAssets.map((asset, index) => ({
+        id: Date.now() + index,
+        imageUri: asset.uri,
+        color: PHOTO_COLORS[Math.floor(Math.random() * PHOTO_COLORS.length)]!,
+        uploadedAt: asset.date,
+      }));
+
+      setPhotos((prev) => {
+        const updated = [...prev, ...newPhotos];
+        setHeroPhoto((currentHero) => currentHero || updated[0]);
+        return updated;
+      });
+
+      triggerToast("✅", `${pickedAssets.length}장의 사진이 추가되었어요`);
     }
   };
 
   const toAlbumDetailParams = useCallback(
-    (photoId: number) => ({
-      photoId,
+    (photo: Photo) => ({
+      photoId: photo.id,
+      imageUri: photo.imageUri,
+      uploadedAt: photo.uploadedAt,
       folderId,
       folderName,
       folderCount,
@@ -208,14 +208,14 @@ export default function AlbumPhotosScreen({ route }: Props) {
       <ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 100, flexGrow: 1 }}
       >
         <TouchableOpacity
           style={[styles.hero, { backgroundColor: heroPhoto?.color || folderCoverColor }]}
           activeOpacity={0.9}
           onPress={() => {
             if (heroPhoto) {
-              navigation.navigate("AlbumDetail", toAlbumDetailParams(heroPhoto.id));
+              navigation.navigate("AlbumDetail", toAlbumDetailParams(heroPhoto));
             }
           }}
         >
@@ -225,15 +225,23 @@ export default function AlbumPhotosScreen({ route }: Props) {
           <View style={styles.heroContent}>
             <Text style={styles.heroTitle}>{folderName}</Text>
             <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>{folderCount}/{folderMaxCount}</Text>
+              <Text style={styles.heroBadgeText}>
+                {photos.length}/{folderMaxCount}
+              </Text>
             </View>
           </View>
         </TouchableOpacity>
 
-        <PhotoGrid
-          photos={DUMMY_PHOTOS}
-          onPhotoPress={(p) => navigation.navigate("AlbumDetail", toAlbumDetailParams(p.id))}
-        />
+        {photos.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>가족과 함께한 추억을 등록해보세요</Text>
+          </View>
+        ) : (
+          <PhotoGrid
+            photos={photos}
+            onPhotoPress={(p) => navigation.navigate("AlbumDetail", toAlbumDetailParams(p))}
+          />
+        )}
       </ScrollView>
 
       <TouchableOpacity style={styles.fab} onPress={handleAddPhotos} activeOpacity={0.85}>
@@ -265,7 +273,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
     fontSize: 16,
-    fontFamily: "Pretendard-Medium",
+    fontFamily: "NanumSquareRound-Bold",
     color: Colors.text,
     textAlign: "center",
   },
@@ -284,9 +292,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  heroTitle: { fontSize: 18, fontFamily: "NanumSquareRound-Bold", color: Colors.white },
+  heroTitle: {
+    fontSize: 18,
+    fontFamily: "NanumSquareRound-Bold",
+    color: Colors.white,
+  },
   heroBadge: { backgroundColor: "rgba(0,0,0,0.4)", borderRadius: 10, paddingVertical: 3, paddingHorizontal: 10 },
   heroBadgeText: { fontSize: 13, fontFamily: "Pretendard-Regular", color: Colors.white },
+  emptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingTop: 150,
+  },
+  emptyStateText: {
+    fontSize: 15,
+    fontFamily: "NanumSquareRound-Regular",
+    color: Colors.textHint,
+    textAlign: "center",
+  },
   fab: {
     position: "absolute",
     bottom: 40,

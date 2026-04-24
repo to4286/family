@@ -19,7 +19,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as MediaLibrary from "expo-media-library";
-import * as FileSystem from "expo-file-system/legacy";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -37,29 +36,13 @@ type AlbumComment = {
   createdAt: string;
 };
 
-const PHOTO_DATE = "2024-08-15";
-const PHOTO_DOWNLOAD_URL = "https://picsum.photos/800/1200";
-
 const BOTTOM_SHEET_SLIDE_OFFSET = 300;
 const BOTTOM_SHEET_OPEN_MS = 250;
 const BOTTOM_SHEET_CLOSE_MS = 200;
 
-const DUMMY_COMMENTS: AlbumComment[] = [
-  { id: 1, memberPhotoUri: "https://i.pravatar.cc/150?img=47", memberNickname: "이영희", text: "우리 가족 너무 행복해 보여~", createdAt: "2일 전" },
-  { id: 2, memberPhotoUri: "https://i.pravatar.cc/150?img=12", memberNickname: "김철수", text: "다음에 또 가자!", createdAt: "1일 전" },
-];
-
 const MY_PHOTO_URI = "https://i.pravatar.cc/150?img=33";
 
 const { height: WINDOW_HEIGHT } = Dimensions.get("window");
-
-function formatPhotoDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const year = date.getFullYear();
-  const month = date.getMonth() + 1;
-  const day = date.getDate();
-  return `${year}년 ${month}월 ${day}일`;
-}
 
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -72,9 +55,9 @@ function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
 export default function AlbumDetailScreen({ route }: Props) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
-  const { folderId, folderName, folderCount, folderMaxCount, folderCoverColor } = route.params;
+  const { folderId, folderName, folderCount, folderMaxCount, folderCoverColor, imageUri, uploadedAt } = route.params;
 
-  const [comments, setComments] = useState<AlbumComment[]>(DUMMY_COMMENTS);
+  const [comments, setComments] = useState<AlbumComment[]>([]);
   const [text, setText] = useState("");
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
@@ -205,21 +188,16 @@ export default function AlbumDetailScreen({ route }: Props) {
         Alert.alert("권한 필요", "갤러리에 저장하려면 사진 접근 권한이 필요해요.");
         return;
       }
-      const base = FileSystem.cacheDirectory;
-      if (!base) {
-        Alert.alert("오류", "임시 저장 공간을 사용할 수 없어요.");
-        return;
+      if (imageUri) {
+        await MediaLibrary.saveToLibraryAsync(imageUri);
       }
-      const target = `${base}album-detail-${Date.now()}.jpg`;
-      const download = await FileSystem.downloadAsync(PHOTO_DOWNLOAD_URL, target);
-      await MediaLibrary.saveToLibraryAsync(download.uri);
       closeBottomSheet(() => {
         triggerToast("✅", "사진을 저장했습니다");
       });
     } catch {
       Alert.alert("오류", "사진을 저장하지 못했어요. 다시 시도해 주세요.");
     }
-  }, [closeBottomSheet, triggerToast]);
+  }, [closeBottomSheet, triggerToast, imageUri]);
 
   const handleOpenDeleteFromMenu = useCallback(() => {
     closeBottomSheet(() => setShowDeleteConfirm(true));
@@ -248,7 +226,7 @@ export default function AlbumDetailScreen({ route }: Props) {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.6}>
             <ChevronLeftIcon size={32} color={Colors.textSub} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{formatPhotoDate(PHOTO_DATE)}</Text>
+          <Text style={styles.headerTitle}>{uploadedAt ?? ""}</Text>
           <TouchableOpacity
             style={styles.headerButton}
             onPress={() => setShowMenu(true)}
@@ -261,7 +239,7 @@ export default function AlbumDetailScreen({ route }: Props) {
 
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <TouchableOpacity style={styles.photo} activeOpacity={0.95} onPress={openFullscreen}>
-            <Image source={{ uri: PHOTO_DOWNLOAD_URL }} style={styles.photoImage} resizeMode="cover" />
+            {imageUri ? <Image source={{ uri: imageUri }} style={styles.photoImage} resizeMode="cover" /> : null}
           </TouchableOpacity>
 
           <View style={styles.commentSection}>
@@ -376,7 +354,7 @@ export default function AlbumDetailScreen({ route }: Props) {
               {...panResponder.panHandlers}
               style={[styles.fullScreenPhotoContainer, { transform: [{ translateY: panY }] }]}
             >
-              <Image source={{ uri: PHOTO_DOWNLOAD_URL }} style={styles.fullScreenPhoto} resizeMode="contain" />
+              {imageUri ? <Image source={{ uri: imageUri }} style={styles.fullScreenPhoto} resizeMode="contain" /> : null}
             </Animated.View>
           </SafeAreaView>
         </Animated.View>

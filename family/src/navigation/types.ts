@@ -22,6 +22,8 @@ export type MainTabStackParamList = {
   };
   AlbumDetail: {
     photoId: number;
+    imageUri?: string;
+    uploadedAt?: string;
     folderId: number;
     folderName: string;
     folderCount: number;
@@ -47,6 +49,7 @@ export type MainTabStackParamList = {
   NicknameEdit: undefined;
   ProfilePhotoEdit: undefined;
   FamilyTypeEdit: undefined;
+  NoticeDetail: undefined;
 };
 
 export type RootStackParamList = {
