@@ -9,6 +9,7 @@ import {
   Keyboard,
   Platform,
   StyleSheet,
+  Alert,
   Linking,
   Animated,
   Modal,
@@ -17,6 +18,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
@@ -44,6 +46,14 @@ const AGREEMENT_ITEMS = [
 const CODE_LENGTH = 6;
 const MAX_NICKNAME = 6;
 const ERROR_COLOR = "#D4645A"; // 설정 화면과 통일된 에러 컬러
+
+const CARD_SURFACE_SHADOW = {
+  shadowColor: "#8B6914",
+  shadowOffset: { width: 1, height: 3 },
+  shadowOpacity: 0.15,
+  shadowRadius: 1.5,
+  elevation: 3,
+};
 
 const BOTTOM_SHEET_SLIDE_OFFSET = 300;
 const BOTTOM_SHEET_OPEN_MS = 250;
@@ -289,7 +299,7 @@ function NicknameScreen({ onNext, nickname, setNickname }: any) {
   );
 }
 
-function ProfilePhotoScreen({ onNext, profileImage, showPhotoModal, setShowPhotoModal, onSelectAlbum, onTakePhoto, isLastStep }: any) {
+function ProfilePhotoScreen({ onNext, profileImage, showPhotoModal, setShowPhotoModal, onSelectAlbum, onTakePhoto }: any) {
   const hasPhoto = profileImage != null;
   return (
     <View style={styles.screen}>
@@ -313,7 +323,7 @@ function ProfilePhotoScreen({ onNext, profileImage, showPhotoModal, setShowPhoto
         </TouchableOpacity>
         <Text style={styles.photoHint}>터치해서 사진 선택</Text>
       </View>
-      <BtnPrimary label={isLastStep ? "시작하기" : "다음"} onPress={onNext} disabled={!hasPhoto} />
+      <BtnPrimary label="다음" onPress={onNext} disabled={!hasPhoto} />
       <View style={{ height: 8 }} />
       <BtnGhost label="나중에 설정할게요" onPress={onNext} />
       <PhotoSelectionModal visible={showPhotoModal} onClose={() => setShowPhotoModal(false)} onSelectAlbum={onSelectAlbum} onTakePhoto={onTakePhoto} />
@@ -410,6 +420,82 @@ function FamilyTypeScreen({ onNext, selected, setSelected, customText, setCustom
   );
 }
 
+function NotificationPermissionScreen({ finish }: { finish: () => void }) {
+  const insets = useSafeAreaInsets();
+
+  const handleAllow = async () => {
+    const { status } = await Notifications.requestPermissionsAsync();
+
+    if (status === "granted") {
+      finish();
+    } else {
+      Alert.alert(
+        "알림 권한 안내",
+        "알림을 허용하지 않으면 가족의 소식을 놓칠 수 있어요. 기기 설정에서 언제든지 알림을 켤 수 있습니다.",
+        [
+          { text: "나중에 하기", style: "cancel", onPress: () => finish() },
+          {
+            text: "설정으로 이동",
+            onPress: () => {
+              Linking.openSettings();
+              finish();
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  const handleLater = () => finish();
+
+  return (
+    <Modal visible transparent animationType="fade">
+      <View style={StyleSheet.absoluteFillObject}>
+        <View style={[StyleSheet.absoluteFillObject, styles.notificationDim]} />
+        <View style={[StyleSheet.absoluteFillObject, styles.notificationModalContent]} pointerEvents="box-none">
+          <View style={[styles.notificationSheet, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+            <Text style={styles.notificationTitle}>{"대화가 끊기지 않게\n가족의 소식을 알려드려요!"}</Text>
+            <Text style={styles.notificationSubtitle}>
+              알림 권한 <Text style={styles.notificationSubtitleEm}>허용</Text>시, 더 원활한 소통이 가능해요!
+            </Text>
+
+            <View style={styles.mockupStack}>
+              <View style={[styles.notifCard, CARD_SURFACE_SHADOW]}>
+                <View style={styles.notifEmojiWrap}>
+                  <Text style={styles.notifEmojiText}>👨</Text>
+                </View>
+                <View style={styles.notifCardContent}>
+                  <View style={styles.notifCardHeader}>
+                    <Text style={styles.notifAppName}>가족</Text>
+                    <Text style={styles.notifCardTime}>방금 전</Text>
+                  </View>
+                  <Text style={styles.notifCardBody}>아빠가 새로운 스토리를 올렸어요</Text>
+                </View>
+              </View>
+              <View style={[styles.notifCard, CARD_SURFACE_SHADOW]}>
+                <View style={styles.notifEmojiWrap}>
+                  <Text style={styles.notifEmojiText}>👩</Text>
+                </View>
+                <View style={styles.notifCardContent}>
+                  <View style={styles.notifCardHeader}>
+                    <Text style={styles.notifAppName}>가족</Text>
+                    <Text style={styles.notifCardTime}>10분 전</Text>
+                  </View>
+                  <Text style={styles.notifCardBody}>엄마가 내 사진에 댓글을 남겼어요</Text>
+                </View>
+              </View>
+            </View>
+
+            <BtnPrimary label="알림 허용하기" onPress={handleAllow} />
+            <View style={{ height: 8 }} />
+            <BtnGhost label="나중에 하기" onPress={handleLater} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 // --- 메인 온보딩 컴포넌트 ---
 export default function OnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -429,7 +515,7 @@ export default function OnboardingScreen() {
 
   const next = (joining?: boolean) => {
     if (joining === true || joining === false) setIsJoiningByCode(joining);
-    setStep((s) => Math.min(s + 1, 6));
+    setStep((s) => Math.min(s + 1, 7));
   };
   const back = () => {
     setShowPhotoModal(false);
@@ -452,7 +538,7 @@ export default function OnboardingScreen() {
       case 5:
         return (
           <ProfilePhotoScreen
-            onNext={isJoiningByCode ? finish : next}
+            onNext={next}
             profileImage={profileImage}
             showPhotoModal={showPhotoModal}
             setShowPhotoModal={setShowPhotoModal}
@@ -466,11 +552,15 @@ export default function OnboardingScreen() {
               setShowPhotoModal(false);
               if (uri) setProfileImage(uri);
             }}
-            isLastStep={isJoiningByCode}
           />
         );
       case 6:
-        return <FamilyTypeScreen onNext={finish} selected={familyType} setSelected={setFamilyType} customText={customFamilyType} setCustomText={setCustomFamilyType} />;
+        if (isJoiningByCode) {
+          return <NotificationPermissionScreen finish={finish} />;
+        }
+        return <FamilyTypeScreen onNext={next} selected={familyType} setSelected={setFamilyType} customText={customFamilyType} setCustomText={setCustomFamilyType} />;
+      case 7:
+        return <NotificationPermissionScreen finish={finish} />;
       default:
         return null;
     }
@@ -584,4 +674,91 @@ const styles = StyleSheet.create({
   },
   familyTypeText: { fontSize: 15, fontFamily: "Pretendard-Regular" },
   familyTypeCustomInput: { paddingVertical: 0, paddingHorizontal: 0, borderWidth: 0, backgroundColor: "transparent" },
+  notificationDim: {
+    backgroundColor: "rgba(46, 34, 22, 0.55)",
+  },
+  notificationModalContent: {
+    justifyContent: "flex-end",
+  },
+  notificationSheet: {
+    backgroundColor: Colors.white,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 28,
+    paddingTop: 32,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  notificationTitle: {
+    fontSize: 22,
+    fontFamily: "NanumSquareRound-Bold",
+    color: Colors.text,
+    lineHeight: 32,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  notificationSubtitle: {
+    fontSize: 14,
+    fontFamily: "Pretendard-Regular",
+    color: Colors.textSub,
+    lineHeight: 22,
+    textAlign: "center",
+    marginBottom: 28,
+  },
+  notificationSubtitleEm: {
+    fontFamily: "Pretendard-Medium",
+    color: Colors.accent,
+  },
+  mockupStack: {
+    width: "100%",
+    marginBottom: 28,
+    gap: 12,
+  },
+  notifCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+  notifCardContent: {
+    flex: 1,
+    gap: 2,
+  },
+  notifCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  notifAppName: {
+    fontSize: 12,
+    fontFamily: "Pretendard-Medium",
+    color: Colors.textSub,
+  },
+  notifEmojiWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notifEmojiText: { fontSize: 24 },
+  notifCardBody: {
+    fontSize: 14,
+    fontFamily: "Pretendard-Medium",
+    color: Colors.text,
+    lineHeight: 20,
+  },
+  notifCardTime: {
+    fontSize: 11,
+    fontFamily: "Pretendard-Regular",
+    color: Colors.textHint,
+    marginTop: 0,
+  },
 });

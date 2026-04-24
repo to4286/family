@@ -8,6 +8,7 @@ import {
   Modal,
   TextInput,
   Platform,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -244,7 +245,7 @@ export default function SettingsScreen() {
               </Svg>
               <Text style={styles.overlayTitle}>알림이 허용되지 않았어요</Text>
               <Text style={styles.overlayDesc}>알림을 받으려면{"\n"}알림 권한을 허용해주세요</Text>
-              <TouchableOpacity style={styles.overlayBtn} onPress={() => setNotifAllowed(true)} activeOpacity={0.8}>
+              <TouchableOpacity style={styles.overlayBtn} onPress={() => Linking.openSettings()} activeOpacity={0.8}>
                 <Text style={styles.overlayBtnText}>설정으로 이동</Text>
               </TouchableOpacity>
             </View>
