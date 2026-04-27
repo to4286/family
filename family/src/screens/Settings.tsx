@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
+import { supabase } from "../utils/supabase";
 
 // --- 상수 및 데이터 ---
 const NOTIF_SETTINGS = [
@@ -201,8 +202,9 @@ export default function SettingsScreen() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setShowLogoutModal(false);
+    await supabase.auth.signOut();
     navigation.reset({
       index: 0,
       routes: [{ name: "OnboardingStack" as never }],

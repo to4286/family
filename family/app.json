@@ -45,7 +45,8 @@
           "photosPermission": "프로필과 스토리에 표시할 사진을 선택할 수 있도록 사진에 접근합니다.",
           "cameraPermission": "프로필 사진을 촬영할 수 있도록 카메라를 사용합니다."
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }

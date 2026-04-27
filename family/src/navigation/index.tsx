@@ -210,9 +210,18 @@ function MainTabStackNavigator() {
 
 // ─── Root Navigator ───────────────────────────────────────────────────────────
 
-export default function RootNavigator() {
+export type RootStackEntryRoute = "MainTab" | "OnboardingStack";
+
+type RootNavigatorProps = {
+  initialRouteName?: RootStackEntryRoute;
+};
+
+export default function RootNavigator({ initialRouteName = "OnboardingStack" }: RootNavigatorProps) {
   return (
-    <RootStack.Navigator screenOptions={{ headerShown: false }}>
+    <RootStack.Navigator
+      initialRouteName={initialRouteName}
+      screenOptions={{ headerShown: false }}
+    >
       <RootStack.Screen name="MainTab" component={MainTabStackNavigator} />
       <RootStack.Screen name="OnboardingStack" component={OnboardingNavigator} />
       <RootStack.Screen name="Settings" component={SettingsScreen} />

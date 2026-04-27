@@ -19,9 +19,31 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
+import * as WebBrowser from "expo-web-browser";
+import { makeRedirectUri } from "expo-auth-session";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
+import { supabase } from "../utils/supabase";
+import { File } from "expo-file-system/next";
+import { decode } from "base64-arraybuffer";
+
+WebBrowser.maybeCompleteAuthSession();
+
+function getAuthCallbackParams(input: string) {
+  const url = new URL(input, "https://phony.example");
+  const errorCode = url.searchParams.get("errorCode");
+  if (errorCode) url.searchParams.delete("errorCode");
+  const params: Record<string, string> = Object.fromEntries(
+    url.searchParams as unknown as Iterable<[string, string]>
+  );
+  if (url.hash) {
+    new URLSearchParams(url.hash.replace(/^#/, "")).forEach((value, key) => {
+      params[key] = value;
+    });
+  }
+  return { errorCode, params };
+}
 
 // --- 상수 및 데이터 ---
 const ROLES = [
@@ -38,14 +60,24 @@ const FAMILY_TYPES = [
 ];
 
 const AGREEMENT_ITEMS = [
-  { key: "terms" as const, label: "서비스 이용약관 동의", req: true },
-  { key: "privacy" as const, label: "개인정보 수집 동의", req: true },
-  { key: "marketing" as const, label: "마케팅 수신 동의", req: false },
+  { key: "terms" as const, label: "서비스 이용약관 동의", req: true, url: "https://www.notion.so/34ff9aeb2c4780e4bac3cdbbc8e7d777" },
+  { key: "privacy" as const, label: "개인정보 수집 동의", req: true, url: "https://www.notion.so/34ff9aeb2c4780249717cfbe6ff7480a" },
+  { key: "marketing" as const, label: "마케팅 수신 동의", req: false, url: null },
 ];
 
 const CODE_LENGTH = 6;
 const MAX_NICKNAME = 6;
 const ERROR_COLOR = "#D4645A"; // 설정 화면과 통일된 에러 컬러
+
+const INVITE_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function generateInviteCode(): string {
+  let result = "";
+  for (let i = 0; i < CODE_LENGTH; i++) {
+    result += INVITE_CODE_CHARS.charAt(Math.floor(Math.random() * INVITE_CODE_CHARS.length));
+  }
+  return result;
+}
 
 const CARD_SURFACE_SHADOW = {
   shadowColor: "#8B6914",
@@ -134,7 +166,69 @@ function PhotoSelectionModal({ visible, onClose, onSelectAlbum, onTakePhoto }: a
 
 // --- 개별 화면 스크린 ---
 
-function LoginScreen({ onNext }: { onNext: () => void }) {
+function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExistingMember: () => void }) {
+  const handleGoogleLogin = async () => {
+    const redirectTo = makeRedirectUri();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+    if (error) {
+      Alert.alert("로그인 실패", error.message);
+      return;
+    }
+    if (!data.url) {
+      Alert.alert("로그인 실패", "인증 주소를 가져올 수 없습니다.");
+      return;
+    }
+    const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (res.type === "success") {
+      const { params, errorCode } = getAuthCallbackParams(res.url);
+      if (errorCode) {
+        Alert.alert("로그인 실패", errorCode);
+        return;
+      }
+      if (params.error) {
+        Alert.alert("로그인 실패", params.error_description || params.error);
+        return;
+      }
+      if (params.code) {
+        const { error: sessionError } = await supabase.auth.exchangeCodeForSession(params.code);
+        if (sessionError) {
+          Alert.alert("로그인 실패", sessionError.message);
+          return;
+        }
+      } else {
+        const access_token = params.access_token;
+        const refresh_token = params.refresh_token;
+        if (!access_token || !refresh_token) {
+          Alert.alert("로그인 실패", "세션 정보를 응답에서 찾을 수 없습니다.");
+          return;
+        }
+        const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
+        if (sessionError) {
+          Alert.alert("로그인 실패", sessionError.message);
+          return;
+        }
+      }
+      // 이미 가입된 회원인지 확인
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: member } = await supabase
+          .from("members")
+          .select("id")
+          .eq("auth_uid", user.id)
+          .single();
+
+        if (member) {
+          onExistingMember();
+          return;
+        }
+      }
+      onNext();
+    }
+  };
+
   return (
     <View style={[styles.screen, { paddingTop: 32 }]}>
       <View style={styles.loginHero}>
@@ -142,7 +236,7 @@ function LoginScreen({ onNext }: { onNext: () => void }) {
         <Text style={styles.loginTitle}>{"가까운듯\n먼 사이"}</Text>
         <Text style={styles.loginSubtitle}>가족과 더 가까워지는 따뜻한 공간</Text>
         <View style={styles.socialBtns}>
-          <TouchableOpacity onPress={onNext} activeOpacity={0.8} style={styles.googleBtn}>
+          <TouchableOpacity onPress={handleGoogleLogin} activeOpacity={0.8} style={styles.googleBtn}>
             <View style={styles.logoPlaceholder} />
             <Text style={styles.googleBtnText}>구글로 로그인</Text>
           </TouchableOpacity>
@@ -173,7 +267,7 @@ function AgreementScreen({ onNext, checks, setChecks }: any) {
         <Text style={styles.allCheckLabel}>전체 동의</Text>
       </TouchableOpacity>
       <View style={styles.divider} />
-      {AGREEMENT_ITEMS.map(({ key, label, req }) => (
+      {AGREEMENT_ITEMS.map(({ key, label, req, url }) => (
         <View key={key} style={styles.agreementRow}>
           <TouchableOpacity onPress={() => toggle(key)} style={styles.agreementToggleArea} activeOpacity={0.8}>
             <Checkbox checked={checks[key]} onToggle={() => toggle(key)} />
@@ -182,9 +276,11 @@ function AgreementScreen({ onNext, checks, setChecks }: any) {
               <Text style={styles.agreementTag}>({req ? "필수" : "선택"})</Text>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.agreementLinkBtn} onPress={() => {}} activeOpacity={0.6}>
-            <Text style={styles.agreementArrow}>{">"}</Text>
-          </TouchableOpacity>
+          {url && (
+            <TouchableOpacity style={styles.agreementLinkBtn} onPress={() => Linking.openURL(url)} activeOpacity={0.6}>
+              <Text style={styles.agreementArrow}>{">"}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ))}
       <View style={{ flex: 1 }} />
@@ -201,9 +297,18 @@ function InviteCodeScreen({ onNext, onSkip, code, setCode }: any) {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleNext = () => {
-    if (code === "QWERTY") onNext(true); // 코드 성공
-    else setError(true);
+  const handleNext = async () => {
+    const { data, error } = await supabase
+      .from("families")
+      .select("id")
+      .eq("invite_code", code)
+      .single();
+
+    if (error || !data) {
+      setError(true);
+    } else {
+      onNext(true);
+    }
   };
   const handleTextChange = (text: string) => {
     if (error) setError(false);
@@ -420,7 +525,7 @@ function FamilyTypeScreen({ onNext, selected, setSelected, customText, setCustom
   );
 }
 
-function NotificationPermissionScreen({ finish }: { finish: () => void }) {
+function NotificationPermissionScreen({ finish }: { finish: () => void | Promise<void> }) {
   const insets = useSafeAreaInsets();
 
   const handleAllow = async () => {
@@ -512,6 +617,7 @@ export default function OnboardingScreen() {
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [familyType, setFamilyType] = useState<number | null>(null);
   const [customFamilyType, setCustomFamilyType] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const next = (joining?: boolean) => {
     if (joining === true || joining === false) setIsJoiningByCode(joining);
@@ -521,12 +627,118 @@ export default function OnboardingScreen() {
     setShowPhotoModal(false);
     setStep((s) => Math.max(s - 1, 0));
   };
-  const finish = () => navigation.reset({ index: 0, routes: [{ name: "MainTab" as never }] });
+  const finish = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        Alert.alert("오류", "로그인 정보를 찾을 수 없어요. 다시 로그인해주세요.");
+        setIsSaving(false);
+        return;
+      }
+
+      let familyId: number;
+
+      if (isJoiningByCode && code) {
+        const { data: family, error: familyError } = await supabase
+          .from("families")
+          .select("id")
+          .eq("invite_code", code)
+          .single();
+
+        if (familyError || !family) {
+          Alert.alert("오류", "가족 코드를 찾을 수 없어요.");
+          setIsSaving(false);
+          return;
+        }
+        familyId = family.id;
+      } else {
+        const familyTypeText =
+          familyType !== null
+            ? familyType === FAMILY_TYPES.length - 1
+              ? customFamilyType
+              : FAMILY_TYPES[familyType]
+            : null;
+
+        const inviteCode = generateInviteCode();
+
+        const { data: newFamily, error: createError } = await supabase
+          .from("families")
+          .insert({ invite_code: inviteCode, family_type: familyTypeText })
+          .select("id")
+          .single();
+
+        if (createError || !newFamily) {
+          Alert.alert("오류", "가족 그룹 생성에 실패했어요. 다시 시도해주세요.");
+          setIsSaving(false);
+          return;
+        }
+        familyId = newFamily.id;
+      }
+
+      let profileImageUrl: string | null = null;
+
+      if (profileImage) {
+        const storagePath = `${user.id}/profile.jpg`;
+
+        const file = new File(profileImage);
+        const base64 = await file.base64();
+
+        const { error: uploadError } = await supabase.storage
+          .from("profiles")
+          .upload(storagePath, decode(base64), {
+            contentType: "image/jpeg",
+            upsert: true,
+          });
+
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage
+            .from("profiles")
+            .getPublicUrl(storagePath);
+          profileImageUrl = urlData.publicUrl;
+        }
+      }
+
+      const roleType = role !== null ? ROLES[role].sub : null;
+
+      const { data: newMember, error: memberError } = await supabase
+        .from("members")
+        .insert({
+          auth_uid: user.id,
+          family_id: familyId,
+          nickname: nickname.trim(),
+          role_type: roleType,
+          profile_image_url: profileImageUrl,
+          terms_agreed: checks.terms,
+          marketing_agreed: checks.marketing,
+        })
+        .select("id")
+        .single();
+
+      if (memberError || !newMember) {
+        Alert.alert("오류", `회원 저장 실패: ${memberError?.message || "알 수 없는 오류"}\n코드: ${memberError?.code || "없음"}`);
+        setIsSaving(false);
+        return;
+      }
+
+      await supabase.from("member_settings").insert({
+        member_id: newMember.id,
+      });
+
+      navigation.reset({ index: 0, routes: [{ name: "MainTab" as never }] });
+    } catch (e: any) {
+      Alert.alert("오류", `문제 발생: ${e?.message || JSON.stringify(e)}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const renderScreen = () => {
     switch (step) {
       case 0:
-        return <LoginScreen onNext={next} />;
+        return <LoginScreen onNext={next} onExistingMember={() => navigation.reset({ index: 0, routes: [{ name: "MainTab" as never }] })} />;
       case 1:
         return <AgreementScreen onNext={next} checks={checks} setChecks={setChecks} />;
       case 2:
