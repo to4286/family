@@ -20,6 +20,7 @@ import type { CompositeNavigationProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors } from "../constants/colors";
+import { supabase } from "../utils/supabase";
 import { STORY_PHOTO_ASPECT_RATIO } from "../constants/storyPhoto";
 import {
   TOAST_ANIM_MS,
@@ -56,84 +57,9 @@ type MemberPhoto = Member["photos"][number];
 
 // ─── Data & layout constants ───────────────────────────────────────────────────
 
-/** 가입 시 선택한 가족 유형 텍스트 — Supabase 연동 시 동적 로드 예정 */
-const FAMILY_TITLE = "대화가 많은 우리 가족 🏡";
-
 /** 프로필 닉네임·기분 라벨 등 동일 패밀리 텍스트 */
 const FONT_NANUM_ROUND_REGULAR = "NanumSquareRound-Regular";
 const FONT_NANUM_ROUND_BOLD = "NanumSquareRound-Bold";
-
-const MEMBERS: Member[] = [
-  {
-    id: 3,
-    nickname: "민준",
-    isMine: true,
-    currentMood: 2,
-    photoUri: "https://i.pravatar.cc/150?img=33",
-    photos: [],
-    hasUpdate: false,
-  },
-  {
-    id: 1,
-    nickname: "아빠김철",
-    isMine: false,
-    currentMood: 1,
-    photoUri: "https://i.pravatar.cc/150?img=12",
-    /** id는 시간순으로 증가(오래됨=작은 id, 최신=큰 id) — lastSeen·미시청 비교에 사용 */
-    photos: [
-      { id: 101, imageUri: "https://picsum.photos/seed/dad2/400/400", uploadedAt: "3시간 전" },
-      { id: 102, imageUri: "https://picsum.photos/seed/dad1/400/400", uploadedAt: "2시간 전" },
-    ],
-    hasUpdate: true,
-  },
-  {
-    id: 4,
-    nickname: "막내딸지수",
-    isMine: false,
-    currentMood: 2,
-    photoUri: "https://i.pravatar.cc/150?img=68",
-    photos: [
-      { id: 301, imageUri: "https://picsum.photos/seed/jisu3/400/400", uploadedAt: "14시간 전" },
-      { id: 302, imageUri: "https://picsum.photos/seed/jisu2/400/400", uploadedAt: "13시간 전" },
-      { id: 303, imageUri: "https://picsum.photos/seed/jisu1/400/400", uploadedAt: "12시간 전" },
-    ],
-    hasUpdate: true,
-  },
-  {
-    id: 2,
-    nickname: "우리엄마영희",
-    isMine: false,
-    currentMood: 0,
-    photoUri: "https://i.pravatar.cc/150?img=47",
-    photos: [],
-    hasUpdate: false,
-  },
-  {
-    id: 5,
-    nickname: "하은",
-    isMine: false,
-    currentMood: null,
-    photoUri: "https://i.pravatar.cc/150?img=49",
-    photos: [],
-    hasUpdate: false,
-  },
-];
-
-const DUMMY_COMMENTS: Record<number, Comment[]> = {
-  1: [
-    { id: 1, memberPhotoUri: "https://i.pravatar.cc/150?img=33", memberNickname: "민준", text: "아빠 멋있다!", createdAt: "1시간 전" },
-    { id: 2, memberPhotoUri: "https://i.pravatar.cc/150?img=49", memberNickname: "하은", text: "우와 어디야?", createdAt: "30분 전" },
-  ],
-  101: [
-    { id: 3, memberPhotoUri: "https://i.pravatar.cc/150?img=33", memberNickname: "민준", text: "아빠 밥 먹었어?", createdAt: "1시간 전" },
-  ],
-  102: [],
-  301: [
-    { id: 4, memberPhotoUri: "https://i.pravatar.cc/150?img=47", memberNickname: "이영희", text: "지수야 밥은 먹었니?", createdAt: "10시간 전" },
-  ],
-  302: [],
-  303: [],
-};
 
 const MOODS = [
   { icon: "🌟", label: "너무 행복해!" },
@@ -534,12 +460,13 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const mainScrollRef = useRef<ScrollView>(null);
 
-  const [selectedMemberId, setSelectedMemberId] = useState(3);
-  const [members, setMembers] = useState<Member[]>(MEMBERS);
+  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [updates, setUpdates] = useState<Record<number, boolean>>({});
+  const [familyTitle, setFamilyTitle] = useState("우리 가족 🏡");
+  const [inviteCode, setInviteCode] = useState("");
+  const [comments, setComments] = useState<Record<number, Comment[]>>({});
   const [selectedMood, setSelectedMood] = useState(2);
-  const [updates, setUpdates] = useState<Record<number, boolean>>(
-    Object.fromEntries(MEMBERS.map((m) => [m.id, m.isMine ? false : m.hasUpdate]))
-  );
 
   const [photoIndices, setPhotoIndices] = useState<Record<number, number>>({});
   const [lastSeenPhotoIds, setLastSeenPhotoIds] = useState<Record<number, number>>({});
@@ -562,9 +489,98 @@ export default function HomeScreen() {
   }, [toastAnim]);
 
   const [commentPhotoId, setCommentPhotoId] = useState<number | null>(null);
-  const [comments, setComments] = useState<Record<number, Comment[]>>(DUMMY_COMMENTS);
 
   const route = useRoute<RouteProp<MainTabParamList, "Home">>();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFamilyData = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+
+        const { data: myMember } = await supabase
+          .from("members")
+          .select("id, family_id")
+          .eq("auth_uid", user.id)
+          .single();
+
+        if (!myMember || cancelled) return;
+
+        const { data: family } = await supabase
+          .from("families")
+          .select("family_type, invite_code")
+          .eq("id", myMember.family_id)
+          .single();
+
+        if (family && !cancelled) {
+          const typeText = family.family_type || "우리 가족";
+          const truncated = typeText.length > 9 ? typeText.slice(0, 9) + "..." : typeText;
+          setFamilyTitle(`${truncated} 🏡`);
+          setInviteCode(family.invite_code || "");
+        }
+
+        const { data: familyMembers } = await supabase
+          .from("members")
+          .select("id, nickname, profile_image_url, current_mood, role_type")
+          .eq("family_id", myMember.family_id);
+
+        if (!familyMembers || cancelled) return;
+
+        const now = new Date().toISOString();
+        const memberIds = familyMembers.map((m) => m.id);
+        let stories: { id: number; member_id: number; image_url: string; uploaded_at: string }[] | null = null;
+        if (memberIds.length > 0) {
+          const { data } = await supabase
+            .from("stories")
+            .select("id, member_id, image_url, uploaded_at")
+            .in("member_id", memberIds)
+            .gt("expires_at", now);
+          stories = data;
+        }
+
+        const storiesByMember: Record<number, { id: number; imageUri: string; uploadedAt: string }[]> = {};
+        (stories || []).forEach((s) => {
+          if (!storiesByMember[s.member_id]) storiesByMember[s.member_id] = [];
+          const uploadedDate = new Date(s.uploaded_at);
+          const hoursAgo = Math.floor((Date.now() - uploadedDate.getTime()) / (1000 * 60 * 60));
+          const timeText = hoursAgo < 1 ? "방금 전" : `${hoursAgo}시간 전`;
+          storiesByMember[s.member_id].push({
+            id: s.id,
+            imageUri: s.image_url,
+            uploadedAt: timeText,
+          });
+        });
+
+        const memberList: Member[] = familyMembers.map((m) => ({
+          id: m.id,
+          nickname: m.nickname,
+          photoUri: m.profile_image_url || undefined,
+          isMine: m.id === myMember.id,
+          currentMood: m.current_mood,
+          photos: storiesByMember[m.id] || [],
+          hasUpdate:
+            ((storiesByMember[m.id]?.length || 0) > 0 || m.current_mood !== null) &&
+            m.id !== myMember.id,
+        }));
+
+        if (!cancelled) {
+          setMembers(memberList);
+          setUpdates(Object.fromEntries(memberList.map((m) => [m.id, m.isMine ? false : m.hasUpdate])));
+          setSelectedMemberId(myMember.id);
+        }
+      } catch (e) {
+        console.log("가족 데이터 로딩 실패:", e);
+      }
+    };
+
+    loadFamilyData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const params = route.params as
@@ -589,14 +605,10 @@ export default function HomeScreen() {
 
   const { pickFromLibrary, pickFromCamera } = useStoryImagePicker();
 
-  const sortedMembersRef = useRef<Member[]>(
-    sortMembersForDisplay(
-      MEMBERS,
-      Object.fromEntries(MEMBERS.map((m) => [m.id, m.isMine ? false : m.hasUpdate]))
-    )
+  const sortedMembers = useMemo(
+    () => sortMembersForDisplay(members, updates),
+    [members, updates]
   );
-
-  const sortedMembers = sortedMembersRef.current;
 
   const handleAddPhotoSuccess = useCallback(
     (uri: string) => {
@@ -631,6 +643,7 @@ export default function HomeScreen() {
 
   const handlePhotoViewChange = useCallback(
     (idx: number) => {
+      if (selectedMemberId == null) return;
       const m = members.find((x) => x.id === selectedMemberId);
       if (!m?.photos[idx]) return;
       const pid = m.photos[idx].id;
@@ -642,6 +655,7 @@ export default function HomeScreen() {
 
   /** 구성원 탭 전환 시에만: 첫 미시청(또는 최신) 슬롯으로 이어보기 — lastSeen/stale 루프 방지를 위해 deps는 memberId만 */
   useLayoutEffect(() => {
+    if (selectedMemberId == null) return;
     const m = members.find((x) => x.id === selectedMemberId);
     if (!m || m.photos.length === 0) return;
     const lastSeen = lastSeenPhotoIds[selectedMemberId];
@@ -657,7 +671,8 @@ export default function HomeScreen() {
     [members, selectedMemberId]
   );
 
-  const currentPhotoIndex = photoIndices[selectedMemberId] ?? 0;
+  const currentPhotoIndex =
+    selectedMemberId != null ? (photoIndices[selectedMemberId] ?? 0) : 0;
 
   useEffect(() => {
     const refresh = route.params?.refresh;
@@ -676,18 +691,26 @@ export default function HomeScreen() {
   const handleInvite = useCallback(async () => {
     try {
       await Share.share({
-        message: `"${FAMILY_TITLE}"에 초대할게요!\n\n가족 코드: ABC123\n\n앱을 설치하고 위 코드를 입력해주세요.\nhttps://family.app/download`,
+        message: `"${familyTitle}"에 초대할게요!\n\n가족 코드: ${inviteCode}\n\n앱을 설치하고 위 코드를 입력해주세요.\nhttps://family.app/download`,
       });
     } catch (e) {
       // 사용자가 공유 취소한 경우 무시
     }
-  }, []);
+  }, [familyTitle, inviteCode]);
 
-  const handleSaveMood = () => {
-    setMembers((prev) =>
-      prev.map((m) => (m.id === selectedMemberId ? { ...m, currentMood: selectedMood } : m))
-    );
-    triggerToast("✅", "기분이 변경되었어요");
+  const handleSaveMood = async () => {
+    if (selectedMemberId == null) return;
+    const { error } = await supabase
+      .from("members")
+      .update({ current_mood: selectedMood })
+      .eq("id", selectedMemberId);
+
+    if (!error) {
+      setMembers((prev) =>
+        prev.map((m) => (m.id === selectedMemberId ? { ...m, currentMood: selectedMood } : m))
+      );
+      triggerToast("✅", "기분이 변경되었어요");
+    }
   };
 
   const handleOpenComments = (photoId: number) => {
@@ -722,7 +745,7 @@ export default function HomeScreen() {
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{FAMILY_TITLE}</Text>
+        <Text style={styles.headerTitle}>{familyTitle}</Text>
         <TouchableOpacity
           style={styles.notifBtn}
           onPress={() => navigation.navigate("Notifications")}
@@ -773,11 +796,22 @@ export default function HomeScreen() {
                       updates[m.id] && styles.profileImageWrapHasUpdate,
                     ]}
                   >
-                    <Image
-                      source={{ uri: m.photoUri }}
-                      style={styles.profileImage}
-                      resizeMode="cover"
-                    />
+                    {m.photoUri ? (
+                      <Image
+                        source={{ uri: m.photoUri }}
+                        style={styles.profileImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={[styles.profileImage, { alignItems: "center", justifyContent: "center", backgroundColor: Colors.surface }]}>
+                        <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                          <Path
+                            d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z"
+                            fill={Colors.textHint}
+                          />
+                        </Svg>
+                      </View>
+                    )}
                   </View>
                   <Text
                     style={[
@@ -813,7 +847,7 @@ export default function HomeScreen() {
                   />
                   <View style={styles.sectionDivider} />
                   <PhotoSwiper
-                    memberId={selectedMemberId}
+                    memberId={selectedMember.id}
                     photos={selectedMember.photos}
                     currentIndex={currentPhotoIndex}
                     onIndexChange={handlePhotoViewChange}
@@ -829,7 +863,7 @@ export default function HomeScreen() {
                 <>
                   <OtherMoodReadOnly moodIndex={selectedMember.currentMood} />
                   <PhotoSwiper
-                    memberId={selectedMemberId}
+                    memberId={selectedMember.id}
                     photos={selectedMember.photos}
                     currentIndex={currentPhotoIndex}
                     onIndexChange={handlePhotoViewChange}
@@ -924,6 +958,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: "NanumSquareRound-ExtraBold",
     color: Colors.text,
+    flex: 1,
   },
   notifBtn: {
     width: 46,
