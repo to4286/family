@@ -25,6 +25,7 @@ import { Colors } from "../constants/colors";
 import { supabase, supabaseUrl } from "../utils/supabase";
 import { File } from "expo-file-system/next";
 import { decode } from "base64-arraybuffer";
+import { compressImage } from "../utils/imageCompress";
 import { STORY_PHOTO_ASPECT_RATIO } from "../constants/storyPhoto";
 import {
   TOAST_ANIM_MS,
@@ -90,7 +91,7 @@ type Member = {
   photoUri?: string;
   isMine: boolean;
   currentMood: number | null;
-  photos: { id: number; imageUri: string; uploadedAt: string }[];
+  photos: { id: number; imageUri: string; uploadedAt: string; rawUploadedAt: string }[];
   hasUpdate: boolean;
 };
 
@@ -173,8 +174,8 @@ function computeHasUpdateForOtherMember(
 ): boolean {
   const lastSeen = lastSeenIso ? new Date(lastSeenIso).getTime() : 0;
   const hasNewStory = memberStories.some((s) => {
-    const storyTime = new Date(s.uploadedAt).getTime();
-    return isNaN(storyTime) || storyTime > lastSeen;
+    const storyTime = new Date(s.rawUploadedAt).getTime();
+    return !isNaN(storyTime) && storyTime > lastSeen;
   });
   const hasNewMood = lastSeen === 0 && currentMood !== null;
   return hasNewStory || hasNewMood;
@@ -260,7 +261,7 @@ function TodayMemoryCard({ memory }: { memory: TodayMemoryData | null }) {
 }
 
 type SelfMoodPickerProps = {
-  selectedMood: number;
+  selectedMood: number | null;
   savedMood: number | null;
   onSelectMood: (index: number) => void;
   onSave: () => void;
@@ -272,7 +273,7 @@ function SelfMoodPicker({ selectedMood, savedMood, onSelectMood, onSave }: SelfM
       <Text style={styles.moodGuideText}>현재 기분을 선택해주세요</Text>
       <View style={styles.moodIconRow}>
         {MOODS.map((mood, i) => {
-          const selected = selectedMood === i;
+          const selected = selectedMood !== null && selectedMood === i;
           return (
             <TouchableOpacity
               key={mood.label}
@@ -307,7 +308,7 @@ function SelfMoodPicker({ selectedMood, savedMood, onSelectMood, onSave }: SelfM
           );
         })}
       </View>
-      {selectedMood !== savedMood && (
+      {selectedMood !== null && selectedMood !== savedMood && (
         <TouchableOpacity style={styles.saveMoodBtn} onPress={onSave} activeOpacity={0.9}>
           <Text style={styles.saveMoodBtnText}>저장하기</Text>
         </TouchableOpacity>
@@ -541,7 +542,7 @@ export default function HomeScreen() {
   const [familyTitle, setFamilyTitle] = useState("우리 가족 🏡");
   const [inviteCode, setInviteCode] = useState("");
   const [comments, setComments] = useState<Record<number, Comment[]>>({});
-  const [selectedMood, setSelectedMood] = useState(2);
+  const [selectedMood, setSelectedMood] = useState<number | null>(null);
 
   const [photoIndices, setPhotoIndices] = useState<Record<number, number>>({});
   const [lastSeenPhotoIds, setLastSeenPhotoIds] = useState<Record<number, number>>({});
@@ -627,7 +628,10 @@ export default function HomeScreen() {
           stories = data;
         }
 
-        const storiesByMember: Record<number, { id: number; imageUri: string; uploadedAt: string }[]> = {};
+        const storiesByMember: Record<
+          number,
+          { id: number; imageUri: string; uploadedAt: string; rawUploadedAt: string }[]
+        > = {};
         (stories || []).forEach((s) => {
           if (!storiesByMember[s.member_id]) storiesByMember[s.member_id] = [];
           const uploadedDate = new Date(s.uploaded_at);
@@ -637,6 +641,7 @@ export default function HomeScreen() {
             id: s.id,
             imageUri: s.image_url,
             uploadedAt: timeText,
+            rawUploadedAt: s.uploaded_at,
           });
         });
 
@@ -808,7 +813,8 @@ export default function HomeScreen() {
           return;
         }
         const memberId = myRow.id;
-        const file = new File(localUri);
+        const compressedUri = await compressImage(localUri);
+        const file = new File(compressedUri);
         const base64 = await file.base64();
         if (!base64) {
           Alert.alert("오류", "이미지를 읽을 수 없어요.");
@@ -920,7 +926,7 @@ export default function HomeScreen() {
   useEffect(() => {
     const m = members.find((mm) => mm.id === selectedMemberId);
     if (m?.isMine) {
-      setSelectedMood(m.currentMood ?? 2);
+      setSelectedMood(m.currentMood);
     }
   }, [selectedMemberId, members]);
 

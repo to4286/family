@@ -286,12 +286,12 @@ export default function AlbumScreen() {
             .select("id", { count: "exact", head: true })
             .eq("album_id", album.id);
 
-          // 가장 최근 사진을 커버로 사용
+          // 가장 처음에 등록된 사진을 커버로 고정
           const { data: coverPhoto } = await supabase
             .from("photos")
             .select("image_url")
             .eq("album_id", album.id)
-            .order("created_at", { ascending: false })
+            .order("created_at", { ascending: true })
             .limit(1)
             .single();
 

@@ -3,12 +3,14 @@ import {
   Animated,
   View,
   Text,
-  Image,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
   Dimensions,
 } from "react-native";
+import { Image } from "expo-image";
+import { decode } from "base64-arraybuffer";
+import { File } from "expo-file-system/next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -17,6 +19,8 @@ import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import type { MainTabStackParamList } from "../navigation/types";
 import { handleMultipleImagePick } from "../utils/imagePicker";
+import { supabase } from "../utils/supabase";
+import { compressImage } from "../utils/imageCompress";
 
 type Props = NativeStackScreenProps<MainTabStackParamList, "AlbumPhotos">;
 
@@ -30,6 +34,18 @@ type Photo = {
 };
 
 const PHOTO_COLORS = ["#D4B896", "#C9A882", "#E8C9A0", "#B89878", "#DDBF9A", "#C4A87E", "#E0C8A8", "#BFA080", "#D8BC94"];
+
+/** 갤러리 표시용 날짜 문자열 → INSERT용 ISO (없으면 undefined) */
+function galleryLabelToOriginalDateIso(displayDate: string): string | undefined {
+  const m = displayDate.trim().match(/^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/);
+  if (!m) return undefined;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const dt = new Date(y, mo - 1, d, 12, 0, 0, 0);
+  if (Number.isNaN(dt.getTime())) return undefined;
+  return dt.toISOString();
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const GRID_GAP = 3;
@@ -71,42 +87,112 @@ function PhotoGrid({ photos, onPhotoPress }: { photos: Photo[]; onPhotoPress: (p
           {p.map((ph) => (
             <TouchableOpacity key={ph.id} onPress={() => onPhotoPress(ph)} activeOpacity={0.9}
               style={{ width: GRID_COL3, height: GRID_COL3, borderRadius: 4, backgroundColor: ph.color, overflow: "hidden" }}>
-              {ph.imageUri && <Image source={{ uri: ph.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
+              {ph.imageUri && (
+                <Image
+                  source={{ uri: ph.imageUri }}
+                  style={{ width: "100%", height: "100%" }}
+                  contentFit="cover"
+                  transition={200}
+                />
+              )}
             </TouchableOpacity>
           ))}
         </View>
       );
       i += 3;
-    } else if (pat === 2 && i + 2 < photos.length) {
-      const big = photos[i];
-      const sm1 = photos[i + 1];
-      const sm2 = photos[i + 2];
+    } else if (pat === 2) {
+      const big = photos[i]!;
+      const sm1 = i + 1 < photos.length ? photos[i + 1]! : null;
+      const sm2 = i + 2 < photos.length ? photos[i + 2]! : null;
       const bigSize = GRID_COL3 * 2 + GRID_GAP;
+
       rows.push(
         <View key={`r${i}`} style={{ flexDirection: "row", gap: GRID_GAP, marginBottom: GRID_GAP }}>
-          <TouchableOpacity onPress={() => onPhotoPress(big)} activeOpacity={0.9}
-            style={{ width: bigSize, height: bigSize, borderRadius: 4, backgroundColor: big.color, overflow: "hidden" }}>
-            {big.imageUri && <Image source={{ uri: big.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
+          <TouchableOpacity
+            onPress={() => onPhotoPress(big)}
+            activeOpacity={0.9}
+            style={{
+              width: bigSize,
+              height: bigSize,
+              borderRadius: 4,
+              backgroundColor: big.color,
+              overflow: "hidden",
+            }}
+          >
+            {big.imageUri && (
+              <Image
+                source={{ uri: big.imageUri }}
+                style={{ width: "100%", height: "100%" }}
+                contentFit="cover"
+                transition={200}
+              />
+            )}
           </TouchableOpacity>
-          <View style={{ gap: GRID_GAP }}>
-            <TouchableOpacity onPress={() => onPhotoPress(sm1)} activeOpacity={0.9}
-              style={{ width: GRID_COL3, height: GRID_COL3, borderRadius: 4, backgroundColor: sm1.color, overflow: "hidden" }}>
-              {sm1.imageUri && <Image source={{ uri: sm1.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => onPhotoPress(sm2)} activeOpacity={0.9}
-              style={{ width: GRID_COL3, height: GRID_COL3, borderRadius: 4, backgroundColor: sm2.color, overflow: "hidden" }}>
-              {sm2.imageUri && <Image source={{ uri: sm2.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
-            </TouchableOpacity>
-          </View>
+
+          {(sm1 || sm2) && (
+            <View style={{ gap: GRID_GAP }}>
+              {sm1 && (
+                <TouchableOpacity
+                  onPress={() => onPhotoPress(sm1)}
+                  activeOpacity={0.9}
+                  style={{
+                    width: GRID_COL3,
+                    height: GRID_COL3,
+                    borderRadius: 4,
+                    backgroundColor: sm1.color,
+                    overflow: "hidden",
+                  }}
+                >
+                  {sm1.imageUri && (
+                    <Image
+                      source={{ uri: sm1.imageUri }}
+                      style={{ width: "100%", height: "100%" }}
+                      contentFit="cover"
+                      transition={200}
+                    />
+                  )}
+                </TouchableOpacity>
+              )}
+              {sm2 && (
+                <TouchableOpacity
+                  onPress={() => onPhotoPress(sm2)}
+                  activeOpacity={0.9}
+                  style={{
+                    width: GRID_COL3,
+                    height: GRID_COL3,
+                    borderRadius: 4,
+                    backgroundColor: sm2.color,
+                    overflow: "hidden",
+                  }}
+                >
+                  {sm2.imageUri && (
+                    <Image
+                      source={{ uri: sm2.imageUri }}
+                      style={{ width: "100%", height: "100%" }}
+                      contentFit="cover"
+                      transition={200}
+                    />
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
       );
-      i += 3;
+      i += sm2 ? 3 : sm1 ? 2 : 1;
     } else if (pat === 3 && i < photos.length) {
       const ph = photos[i];
       rows.push(
         <TouchableOpacity key={`r${i}`} onPress={() => onPhotoPress(ph)} activeOpacity={0.9}
           style={{ width: "100%", height: 220, borderRadius: 4, backgroundColor: ph.color, marginBottom: GRID_GAP, overflow: "hidden" }}>
-          {ph.imageUri && <Image source={{ uri: ph.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
+          {ph.imageUri && (
+            <Image
+              source={{ uri: ph.imageUri }}
+              style={{ width: "100%", height: "100%" }}
+              contentFit="cover"
+              transition={200}
+            />
+          )}
         </TouchableOpacity>
       );
       i += 1;
@@ -117,7 +203,14 @@ function PhotoGrid({ photos, onPhotoPress }: { photos: Photo[]; onPhotoPress: (p
           {remaining.map((ph) => (
             <TouchableOpacity key={ph.id} onPress={() => onPhotoPress(ph)} activeOpacity={0.9}
               style={{ width: GRID_COL3, height: GRID_COL3, borderRadius: 4, backgroundColor: ph.color, overflow: "hidden" }}>
-              {ph.imageUri && <Image source={{ uri: ph.imageUri }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />}
+              {ph.imageUri && (
+                <Image
+                  source={{ uri: ph.imageUri }}
+                  style={{ width: "100%", height: "100%" }}
+                  contentFit="cover"
+                  transition={200}
+                />
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -141,6 +234,14 @@ export default function AlbumPhotosScreen({ route }: Props) {
   const [showToast, setShowToast] = useState(false);
   const [toastContent, setToastContent] = useState({ icon: "", text: "" });
   const toastAnim = useRef(new Animated.Value(300)).current;
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const triggerToast = useCallback(
     (icon: string, text: string) => {
@@ -156,23 +257,145 @@ export default function AlbumPhotosScreen({ route }: Props) {
     [toastAnim]
   );
 
+  const loadPhotos = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("photos")
+        .select("id, image_url, created_at")
+        .eq("album_id", folderId)
+        // 최신 날짜(오늘에 가까운 순)가 그리드 왼쪽 상단부터 오도록
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.log("사진 목록 조회 실패:", error);
+        return;
+      }
+
+      const photos = data || [];
+
+      if (isMountedRef.current) {
+        // DB의 image_url을 UI가 기대하는 imageUri로 변환
+        const mappedPhotos = (photos || []).map((p, idx) => {
+          const d = new Date(p.created_at as string);
+          const formattedDate = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+
+          return {
+            id: p.id,
+            imageUri: p.image_url,
+            color: PHOTO_COLORS[idx % PHOTO_COLORS.length]!,
+            uploadedAt: formattedDate,
+          };
+        });
+
+        setPhotos(mappedPhotos);
+
+        if (mappedPhotos.length > 0) {
+          const randomIndex = Math.floor(Math.random() * mappedPhotos.length);
+          setHeroPhoto(mappedPhotos[randomIndex]);
+        }
+      }
+    } catch (e) {
+      console.log("사진 로딩 실패:", e);
+    }
+  }, [folderId]);
+
+  useEffect(() => {
+    void loadPhotos();
+  }, [loadPhotos]);
+
+  useEffect(() => {
+    if (route.params?.refresh) {
+      void loadPhotos();
+
+      if (route.params?.toast) {
+        const { icon, message } = route.params.toast;
+        triggerToast(icon, message);
+
+        navigation.setParams({
+          refresh: undefined,
+          toast: undefined,
+        });
+      }
+    }
+  }, [route.params?.refresh, route.params?.toast, loadPhotos, navigation, triggerToast]);
+
   const handleAddPhotos = async () => {
     const pickedAssets = await handleMultipleImagePick();
-    if (pickedAssets && pickedAssets.length > 0) {
-      const newPhotos: Photo[] = pickedAssets.map((asset, index) => ({
-        id: Date.now() + index,
-        imageUri: asset.uri,
-        color: PHOTO_COLORS[Math.floor(Math.random() * PHOTO_COLORS.length)]!,
-        uploadedAt: asset.date,
-      }));
+    if (!pickedAssets || pickedAssets.length === 0) return;
 
-      setPhotos((prev) => {
-        const updated = [...prev, ...newPhotos];
-        setHeroPhoto((currentHero) => currentHero || updated[0]);
-        return updated;
-      });
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // photos INSERT에는 member_id/family_id가 없음. 스토리지 경로용으로 family_id만 조회합니다.
+      const { data: memberRow } = await supabase
+        .from("members")
+        .select("family_id")
+        .eq("auth_uid", user.id)
+        .single();
+
+      if (!memberRow) return;
+
+      const familyId = memberRow.family_id;
+      const batchId = Date.now();
+
+      const results = await Promise.all(
+        pickedAssets.map(async (pick, index) => {
+          try {
+            const iso = galleryLabelToOriginalDateIso(pick.date);
+            const originalDate = iso ? Date.parse(iso) : Date.now();
+
+            const compressedUri = await compressImage(pick.uri);
+            const file = new File(compressedUri);
+            const base64 = await file.base64();
+            if (!base64) {
+              console.log("앨범 이미지 읽기 실패:", index);
+              return null;
+            }
+            const buffer = decode(base64);
+            const storagePath = `${familyId}/${folderId}/${batchId}_${index}.jpg`;
+            const { error: upErr } = await supabase.storage.from("albums").upload(storagePath, buffer, {
+              contentType: "image/jpeg",
+              upsert: false,
+            });
+            if (upErr) {
+              console.log("앨범 스토리지 업로드 실패:", upErr);
+              return null;
+            }
+            const { data: urlData } = supabase.storage.from("albums").getPublicUrl(storagePath);
+            return { publicUrl: urlData.publicUrl, originalDate };
+          } catch (e) {
+            console.log("개별 업로드 실패:", e);
+            return null;
+          }
+        })
+      );
+
+      const validResults = results.filter((r): r is { publicUrl: string; originalDate: number } => r !== null);
+
+      if (isMountedRef.current && validResults.length > 0) {
+        try {
+          const { error: insErr } = await supabase.from("photos").insert(
+            validResults.map((r) => ({
+              album_id: Number(folderId),
+              image_url: r.publicUrl,
+              // DB에 없는 member_id, family_id는 제외하고 created_at은 ISO String으로 변환
+              created_at: r.originalDate ? new Date(r.originalDate).toISOString() : new Date().toISOString(),
+            }))
+          );
+          if (insErr) {
+            console.log("photos INSERT 실패:", insErr);
+          }
+        } catch (insertErr) {
+          console.log("photos INSERT 예외:", insertErr);
+        }
+      }
+
+      await loadPhotos();
 
       triggerToast("✅", `${pickedAssets.length}장의 사진이 추가되었어요`);
+    } catch (e) {
+      console.log("사진 추가 예외:", e);
     }
   };
 
@@ -186,15 +409,13 @@ export default function AlbumPhotosScreen({ route }: Props) {
       folderCount,
       folderMaxCount,
       folderCoverColor,
+      onDeleteSuccess: () => {
+        void loadPhotos();
+        triggerToast("🗑️", "사진이 삭제되었습니다");
+      },
     }),
-    [folderId, folderName, folderCount, folderMaxCount, folderCoverColor]
+    [folderId, folderName, folderCount, folderMaxCount, folderCoverColor, loadPhotos, triggerToast]
   );
-
-  useEffect(() => {
-    if (!route.params?.showDeleteToast) return;
-    triggerToast("🗑️", "사진이 삭제되었습니다");
-    navigation.setParams({ showDeleteToast: undefined });
-  }, [route.params?.showDeleteToast, navigation, triggerToast]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -221,7 +442,12 @@ export default function AlbumPhotosScreen({ route }: Props) {
           }}
         >
           {heroPhoto?.imageUri && (
-            <Image source={{ uri: heroPhoto.imageUri }} style={styles.heroImage} resizeMode="cover" />
+            <Image
+              source={{ uri: heroPhoto.imageUri }}
+              style={styles.heroImage}
+              contentFit="cover"
+              transition={200}
+            />
           )}
           <View style={styles.heroContent}>
             <Text style={styles.heroTitle}>{folderName}</Text>

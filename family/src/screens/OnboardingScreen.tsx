@@ -27,6 +27,7 @@ import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
 import { supabase } from "../utils/supabase";
 import { File } from "expo-file-system/next";
 import { decode } from "base64-arraybuffer";
+import { compressImage } from "../utils/imageCompress";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -683,7 +684,8 @@ export default function OnboardingScreen() {
       if (profileImage) {
         const storagePath = `${user.id}/profile.jpg`;
 
-        const file = new File(profileImage);
+        const compressedUri = await compressImage(profileImage);
+        const file = new File(compressedUri);
         const base64 = await file.base64();
 
         const { error: uploadError } = await supabase.storage

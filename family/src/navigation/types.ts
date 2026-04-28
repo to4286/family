@@ -18,7 +18,8 @@ export type MainTabStackParamList = {
     folderCount: number;
     folderMaxCount: number;
     folderCoverColor: string;
-    showDeleteToast?: boolean;
+    refresh?: number;
+    toast?: { icon: string; message: string };
   };
   AlbumDetail: {
     photoId: number;
@@ -29,6 +30,8 @@ export type MainTabStackParamList = {
     folderCount: number;
     folderMaxCount: number;
     folderCoverColor: string;
+    /** AlbumPhotos에서만 전달. 삭제 후 목록 갱신·토스트용 (비직렬화 경고 무시 가능) */
+    onDeleteSuccess?: () => void;
   };
   ConceptCategories: { memberId: number; memberNickname: string };
   ConceptQuestions: {

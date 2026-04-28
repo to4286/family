@@ -26,6 +26,7 @@ import CheckCircleIcon from "../components/CheckCircleIcon";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import type { MainTabStackParamList } from "../navigation/types";
+import { supabase } from "../utils/supabase";
 
 type Props = NativeStackScreenProps<MainTabStackParamList, "AlbumDetail">;
 
@@ -37,11 +38,14 @@ type AlbumComment = {
   createdAt: string;
 };
 
+type MyMemberProfile = {
+  nickname: string | null;
+  profile_image_url: string | null;
+};
+
 const BOTTOM_SHEET_SLIDE_OFFSET = 300;
 const BOTTOM_SHEET_OPEN_MS = 250;
 const BOTTOM_SHEET_CLOSE_MS = 200;
-
-const MY_PHOTO_URI = "https://i.pravatar.cc/150?img=33";
 
 const { height: WINDOW_HEIGHT } = Dimensions.get("window");
 
@@ -56,7 +60,8 @@ function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
 export default function AlbumDetailScreen({ route }: Props) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
-  const { folderId, folderName, folderCount, folderMaxCount, folderCoverColor, imageUri, uploadedAt } = route.params;
+  const { photoId, folderId, folderName, folderCount, folderMaxCount, folderCoverColor, imageUri, uploadedAt } =
+    route.params;
 
   const [comments, setComments] = useState<AlbumComment[]>([]);
   const [text, setText] = useState("");
@@ -71,6 +76,95 @@ export default function AlbumDetailScreen({ route }: Props) {
   const [toastContent, setToastContent] = useState({ icon: "", text: "" });
   const toastAnim = useRef(new Animated.Value(300)).current;
   const slideAnim = useRef(new Animated.Value(BOTTOM_SHEET_SLIDE_OFFSET)).current;
+
+  const [myProfile, setMyProfile] = useState<MyMemberProfile | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user || cancelled) return;
+        const { data } = await supabase
+          .from("members")
+          .select("nickname, profile_image_url")
+          .eq("auth_uid", user.id)
+          .maybeSingle();
+        if (!cancelled && data) setMyProfile(data);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const fetchComments = useCallback(async () => {
+    try {
+      const { data: rows, error } = await supabase
+        .from("comments")
+        .select("id, writer_id, content, created_at")
+        .eq("target_type", "PHOTO")
+        .eq("target_id", Number(photoId))
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+
+      const list = rows ?? [];
+      if (list.length === 0) {
+        setComments([]);
+        return;
+      }
+
+      const writerIds = [...new Set(list.map((r) => r.writer_id))];
+      const { data: writers } = await supabase
+        .from("members")
+        .select("id, nickname, profile_image_url")
+        .in("id", writerIds);
+
+      const wmap = new Map((writers ?? []).map((w) => [w.id, w]));
+
+      const mapped: AlbumComment[] = list.map((r) => {
+        const w = wmap.get(r.writer_id);
+        const d = new Date(r.created_at);
+
+        const now = new Date();
+        const diffMs = now.getTime() - d.getTime();
+        const diffMin = Math.floor(diffMs / (1000 * 60));
+        const diffHour = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDay = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const diffWeek = Math.floor(diffDay / 7);
+
+        let formattedDate = "";
+        if (diffMs < 0) formattedDate = "방금 전";
+        else if (diffMin < 1) formattedDate = "방금 전";
+        else if (diffHour < 1) formattedDate = `${diffMin}분 전`;
+        else if (diffDay < 1) formattedDate = `${diffHour}시간 전`;
+        else if (diffDay < 7) formattedDate = `${diffDay}일 전`;
+        else if (diffDay < 30) formattedDate = `${diffWeek}주 전`;
+        else formattedDate = `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
+
+        return {
+          id: r.id,
+          memberNickname: w?.nickname || "가족",
+          memberPhotoUri: w?.profile_image_url || undefined,
+          text: r.content,
+          createdAt: formattedDate,
+        };
+      });
+
+      setComments(mapped);
+    } catch (e) {
+      console.log("댓글 로드 실패:", e);
+    }
+  }, [photoId]);
+
+  useEffect(() => {
+    void fetchComments();
+  }, [fetchComments]);
 
   const triggerToast = useCallback(
     (icon: string, text: string) => {
@@ -166,20 +260,35 @@ export default function AlbumDetailScreen({ route }: Props) {
     setShowFullscreen(true);
   }, [panY]);
 
-  const handleSend = () => {
+  const handleCommentSubmit = async () => {
     if (!text.trim()) return;
-    setComments((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        memberPhotoUri: MY_PHOTO_URI,
-        memberNickname: "민준",
-        text: text.trim(),
-        createdAt: "방금 전",
-      },
-    ]);
-    setText("");
-    Keyboard.dismiss();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: me } = await supabase
+        .from("members")
+        .select("id")
+        .eq("auth_uid", user.id)
+        .single();
+
+      if (!me) return;
+
+      const { error } = await supabase.from("comments").insert({
+        target_type: "PHOTO",
+        target_id: Number(photoId),
+        writer_id: me.id,
+        content: text.trim(),
+      });
+
+      if (error) throw error;
+
+      setText("");
+      Keyboard.dismiss();
+      void fetchComments();
+    } catch (e) {
+      console.log("댓글 등록 실패:", e);
+    }
   };
 
   const handleSaveToGallery = useCallback(async () => {
@@ -204,17 +313,30 @@ export default function AlbumDetailScreen({ route }: Props) {
     closeBottomSheet(() => setShowDeleteConfirm(true));
   }, [closeBottomSheet]);
 
-  const handleDelete = useCallback(() => {
-    setShowDeleteConfirm(false);
-    navigation.navigate("AlbumPhotos", {
-      folderId,
-      folderName,
-      folderCount,
-      folderMaxCount,
-      folderCoverColor,
-      showDeleteToast: true,
-    });
-  }, [navigation, folderId, folderName, folderCount, folderMaxCount, folderCoverColor]);
+  const handleDelete = async () => {
+    try {
+      const url = imageUri;
+      const bucketPath = "albums/";
+      if (url) {
+        const idx = url.indexOf(bucketPath);
+        if (idx !== -1) {
+          const filePath = url.substring(idx + bucketPath.length);
+          await supabase.storage.from("albums").remove([filePath]);
+        }
+      }
+
+      const { error } = await supabase.from("photos").delete().eq("id", Number(photoId));
+
+      if (error) throw error;
+
+      setShowDeleteConfirm(false);
+
+      route.params?.onDeleteSuccess?.();
+      navigation.pop();
+    } catch (e) {
+      console.log("사진 삭제 실패:", e);
+    }
+  };
 
   return (
     <View style={styles.outerRoot}>
@@ -259,7 +381,7 @@ export default function AlbumDetailScreen({ route }: Props) {
                         { backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center" },
                       ]}
                     >
-                      <Text style={{ fontSize: 13, color: Colors.textSub }}>{c.memberNickname.charAt(0)}</Text>
+                      <Ionicons name="person" size={20} color={Colors.textHint} />
                     </View>
                   )}
                   <View style={{ flex: 1 }}>
@@ -276,7 +398,18 @@ export default function AlbumDetailScreen({ route }: Props) {
         </ScrollView>
 
         <View style={[styles.inputContainer, { paddingBottom: keyboardVisible ? 8 : insets.bottom + 12 }]}>
-          <Image source={{ uri: MY_PHOTO_URI }} style={styles.myAvatar} />
+          {myProfile?.profile_image_url ? (
+            <Image source={{ uri: myProfile.profile_image_url }} style={styles.myAvatar} />
+          ) : (
+            <View
+              style={[
+                styles.myAvatar,
+                { backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center" },
+              ]}
+            >
+              <Ionicons name="person" size={18} color={Colors.textHint} />
+            </View>
+          )}
           <View style={styles.inputWrap}>
             <TextInput
               style={styles.input}
@@ -289,7 +422,7 @@ export default function AlbumDetailScreen({ route }: Props) {
               numberOfLines={3}
               textAlignVertical="center"
             />
-            <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={!text.trim()} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.sendBtn} onPress={handleCommentSubmit} disabled={!text.trim()} activeOpacity={0.7}>
               <Text style={styles.sendBtnText}>➤</Text>
             </TouchableOpacity>
           </View>
