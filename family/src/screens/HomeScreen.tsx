@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   FlatList,
@@ -13,6 +14,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
@@ -20,7 +22,9 @@ import type { CompositeNavigationProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors } from "../constants/colors";
-import { supabase } from "../utils/supabase";
+import { supabase, supabaseUrl } from "../utils/supabase";
+import { File } from "expo-file-system/next";
+import { decode } from "base64-arraybuffer";
 import { STORY_PHOTO_ASPECT_RATIO } from "../constants/storyPhoto";
 import {
   TOAST_ANIM_MS,
@@ -35,6 +39,43 @@ import CommentSheet from "../components/CommentSheet";
 import type { Comment } from "../components/CommentSheet";
 import PhotoSelectionModal from "../components/PhotoSelectionModal";
 import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
+
+const STORY_EXPIRES_DAYS = 1;
+
+/** 댓글 API 실패 시 Supabase 엔드포인트·PostgrestError 전체를 남김 */
+function logCommentsApiFailure(
+  operation: "comments.select" | "comments.insert",
+  err: unknown,
+  context: Record<string, unknown>
+) {
+  console.log("📡 요청 주소:", supabaseUrl);
+  console.log(`[${operation}] context:`, context);
+  if (err && typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    console.log(`[${operation}] error:`, {
+      message: e.message,
+      code: e.code,
+      details: e.details,
+      hint: e.hint,
+      ...e,
+    });
+  } else {
+    console.log(`[${operation}] error:`, err);
+  }
+}
+
+function formatRelativeCommentTime(iso: string): string {
+  const d = new Date(iso);
+  const diffMs = Date.now() - d.getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "방금 전";
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}일 전`;
+  return d.toLocaleDateString("ko-KR");
+}
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -104,6 +145,40 @@ const headerControlShadow = {
 };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
+
+const LAST_SEEN_KEY = "family_last_seen_timestamps";
+
+async function loadLastSeenTimestamps(): Promise<Record<number, string>> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_SEEN_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function saveLastSeenTimestamp(memberId: number): Promise<void> {
+  try {
+    const existing = await loadLastSeenTimestamps();
+    existing[memberId] = new Date().toISOString();
+    await AsyncStorage.setItem(LAST_SEEN_KEY, JSON.stringify(existing));
+  } catch {}
+}
+
+/** 다른 가족 멤버의 배지: 마지막 확인 이후 새 스토리, 또는 한 번도 확인 안 함 + 기분 설정 */
+function computeHasUpdateForOtherMember(
+  memberStories: MemberPhoto[],
+  lastSeenIso: string | undefined,
+  currentMood: number | null
+): boolean {
+  const lastSeen = lastSeenIso ? new Date(lastSeenIso).getTime() : 0;
+  const hasNewStory = memberStories.some((s) => {
+    const storyTime = new Date(s.uploadedAt).getTime();
+    return isNaN(storyTime) || storyTime > lastSeen;
+  });
+  const hasNewMood = lastSeen === 0 && currentMood !== null;
+  return hasNewStory || hasNewMood;
+}
 
 function sortMembersForDisplay(list: Member[], updatesMap: Record<number, boolean>): Member[] {
   const mine = list.filter((m) => m.isMine);
@@ -491,14 +566,20 @@ export default function HomeScreen() {
   const [commentPhotoId, setCommentPhotoId] = useState<number | null>(null);
 
   const route = useRoute<RouteProp<MainTabParamList, "Home">>();
-
+  const isMountedRef = useRef(true);
   useEffect(() => {
-    let cancelled = false;
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
-    const loadFamilyData = async () => {
+  const loadFamilyData = useCallback(
+    async (options?: { preserveSelectedMemberId?: boolean }): Promise<Member[] | null> => {
       try {
+        const lastSeenMap = await loadLastSeenTimestamps();
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user || cancelled) return;
+        if (!user) return null;
 
         const { data: myMember } = await supabase
           .from("members")
@@ -506,7 +587,7 @@ export default function HomeScreen() {
           .eq("auth_uid", user.id)
           .single();
 
-        if (!myMember || cancelled) return;
+        if (!myMember) return null;
 
         const { data: family } = await supabase
           .from("families")
@@ -514,11 +595,13 @@ export default function HomeScreen() {
           .eq("id", myMember.family_id)
           .single();
 
-        if (family && !cancelled) {
+        if (family) {
           const typeText = family.family_type || "우리 가족";
           const truncated = typeText.length > 9 ? typeText.slice(0, 9) + "..." : typeText;
-          setFamilyTitle(`${truncated} 🏡`);
-          setInviteCode(family.invite_code || "");
+          if (isMountedRef.current) {
+            setFamilyTitle(`${truncated} 🏡`);
+            setInviteCode(family.invite_code || "");
+          }
         }
 
         const { data: familyMembers } = await supabase
@@ -526,17 +609,21 @@ export default function HomeScreen() {
           .select("id, nickname, profile_image_url, current_mood, role_type")
           .eq("family_id", myMember.family_id);
 
-        if (!familyMembers || cancelled) return;
+        if (!familyMembers) return null;
 
         const now = new Date().toISOString();
         const memberIds = familyMembers.map((m) => m.id);
         let stories: { id: number; member_id: number; image_url: string; uploaded_at: string }[] | null = null;
         if (memberIds.length > 0) {
-          const { data } = await supabase
+          const { data, error: storiesErr } = await supabase
             .from("stories")
             .select("id, member_id, image_url, uploaded_at")
             .in("member_id", memberIds)
-            .gt("expires_at", now);
+            .gt("expires_at", now)
+            .order("uploaded_at", { ascending: true });
+          if (storiesErr) {
+            console.log("스토리 조회 실패:", storiesErr);
+          }
           stories = data;
         }
 
@@ -553,34 +640,127 @@ export default function HomeScreen() {
           });
         });
 
-        const memberList: Member[] = familyMembers.map((m) => ({
-          id: m.id,
-          nickname: m.nickname,
-          photoUri: m.profile_image_url || undefined,
-          isMine: m.id === myMember.id,
-          currentMood: m.current_mood,
-          photos: storiesByMember[m.id] || [],
-          hasUpdate:
-            ((storiesByMember[m.id]?.length || 0) > 0 || m.current_mood !== null) &&
-            m.id !== myMember.id,
-        }));
+        const memberList: Member[] = familyMembers.map((m) => {
+          if (m.id === myMember.id) {
+            return {
+              id: m.id,
+              nickname: m.nickname,
+              photoUri: m.profile_image_url || undefined,
+              isMine: true,
+              currentMood: m.current_mood,
+              photos: storiesByMember[m.id] || [],
+              hasUpdate: false,
+            };
+          }
 
-        if (!cancelled) {
+          const memberStories = storiesByMember[m.id] || [];
+          return {
+            id: m.id,
+            nickname: m.nickname,
+            photoUri: m.profile_image_url || undefined,
+            isMine: false,
+            currentMood: m.current_mood,
+            photos: memberStories,
+            hasUpdate: computeHasUpdateForOtherMember(
+              memberStories,
+              lastSeenMap[m.id],
+              m.current_mood
+            ),
+          };
+        });
+
+        if (isMountedRef.current) {
           setMembers(memberList);
           setUpdates(Object.fromEntries(memberList.map((m) => [m.id, m.isMine ? false : m.hasUpdate])));
-          setSelectedMemberId(myMember.id);
+          if (!options?.preserveSelectedMemberId) {
+            setSelectedMemberId(myMember.id);
+          }
         }
+        return memberList;
       } catch (e) {
         console.log("가족 데이터 로딩 실패:", e);
+        return null;
       }
-    };
+    },
+    []
+  );
 
-    loadFamilyData();
+  const fetchCommentsForStory = useCallback(async (storyId: number) => {
+    const storyIdNum = Math.trunc(Number(storyId));
+    if (!Number.isFinite(storyIdNum)) {
+      logCommentsApiFailure("comments.select", new Error("invalid target_id"), {
+        storyId,
+        target_id: storyIdNum,
+      });
+      return;
+    }
 
-    return () => {
-      cancelled = true;
-    };
+    const { data: rows, error } = await supabase
+      .schema("public")
+      .from("comments")
+      .select("*")
+      .eq("target_type", "STORY")
+      .eq("target_id", storyIdNum)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      logCommentsApiFailure("comments.select", error, {
+        table: "public.comments",
+        query: "select * where target_type = story and target_id = …",
+        target_id: storyIdNum,
+      });
+      if (isMountedRef.current) {
+        setComments((prev) => ({ ...prev, [storyIdNum]: [] }));
+      }
+      return;
+    }
+
+    const list = (rows ?? []) as { id: number; writer_id: number; content: string; created_at: string }[];
+    if (list.length === 0) {
+      if (isMountedRef.current) {
+        setComments((prev) => ({ ...prev, [storyIdNum]: [] }));
+      }
+      return;
+    }
+
+    const writerIds = [...new Set(list.map((r) => Math.trunc(Number(r.writer_id))))].filter((id) =>
+      Number.isFinite(id)
+    );
+    const { data: writers, error: wErr } = await supabase
+      .from("members")
+      .select("id, nickname, profile_image_url")
+      .in("id", writerIds);
+    if (wErr) console.log("댓글 작성자 조회 실패:", wErr);
+
+    type WriterRow = { id: number; nickname: string; profile_image_url: string | null };
+    const wmap = new Map<number, WriterRow>(
+      (writers ?? []).map((w) => [Math.trunc(Number(w.id)), w as WriterRow])
+    );
+    const mapped: Comment[] = list.map((r) => {
+      const writerId = Math.trunc(Number(r.writer_id));
+      const w = wmap.get(writerId);
+      return {
+        id: r.id,
+        memberPhotoUri: w?.profile_image_url ?? undefined,
+        memberNickname: w?.nickname ?? "가족",
+        text: r.content,
+        createdAt: formatRelativeCommentTime(r.created_at),
+      };
+    });
+    if (isMountedRef.current) {
+      setComments((prev) => ({ ...prev, [storyIdNum]: mapped }));
+    }
   }, []);
+
+  useEffect(() => {
+    void loadFamilyData();
+  }, [loadFamilyData]);
+
+  useEffect(() => {
+    if (showComments && commentPhotoId != null) {
+      void fetchCommentsForStory(commentPhotoId);
+    }
+  }, [showComments, commentPhotoId, fetchCommentsForStory]);
 
   useEffect(() => {
     const params = route.params as
@@ -610,21 +790,77 @@ export default function HomeScreen() {
     [members, updates]
   );
 
-  const handleAddPhotoSuccess = useCallback(
-    (uri: string) => {
-      const newPhoto: MemberPhoto = { id: Date.now(), imageUri: uri, uploadedAt: "방금 전" };
-      setMembers((prev) =>
-        prev.map((m) => (m.isMine ? { ...m, photos: [...m.photos, newPhoto] } : m))
-      );
-      const me = members.find((m) => m.isMine);
-      if (me) {
-        const lastIdx = me.photos.length;
-        setPhotoIndices((prev) => ({ ...prev, [me.id]: lastIdx }));
-        setLastSeenPhotoIds((prev) => ({ ...prev, [me.id]: newPhoto.id }));
+  const uploadStoryPhoto = useCallback(
+    async (localUri: string) => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          Alert.alert("로그인 필요", "다시 로그인한 뒤 시도해주세요.");
+          return;
+        }
+        const { data: myRow } = await supabase
+          .from("members")
+          .select("id")
+          .eq("auth_uid", user.id)
+          .single();
+        if (!myRow) {
+          Alert.alert("오류", "회원 정보를 찾을 수 없어요.");
+          return;
+        }
+        const memberId = myRow.id;
+        const file = new File(localUri);
+        const base64 = await file.base64();
+        if (!base64) {
+          Alert.alert("오류", "이미지를 읽을 수 없어요.");
+          return;
+        }
+        const buffer = decode(base64);
+        if (buffer.byteLength === 0) {
+          Alert.alert("오류", "이미지가 비어 있어요. 다시 선택해주세요.");
+          return;
+        }
+        const storagePath = `${memberId}/${Date.now()}.jpg`;
+        const { error: upErr } = await supabase.storage.from("stories").upload(storagePath, buffer, {
+          contentType: "image/jpeg",
+          upsert: false,
+        });
+        if (upErr) {
+          console.log("스토리 업로드 실패:", upErr);
+          Alert.alert("업로드 실패", upErr.message);
+          return;
+        }
+        const { data: urlData } = supabase.storage.from("stories").getPublicUrl(storagePath);
+        const publicUrl = urlData.publicUrl;
+        const expiresAt = new Date(
+          Date.now() + STORY_EXPIRES_DAYS * 24 * 60 * 60 * 1000
+        ).toISOString();
+        const { error: insErr } = await supabase.from("stories").insert({
+          member_id: memberId,
+          image_url: publicUrl,
+          expires_at: expiresAt,
+        });
+        if (insErr) {
+          console.log("스토리 DB 저장 실패:", insErr);
+          Alert.alert("저장 실패", insErr.message);
+          return;
+        }
+        setShowPhotoModal(false);
+        const list = await loadFamilyData({ preserveSelectedMemberId: true });
+        if (list) {
+          const me = list.find((m) => m.isMine);
+          if (me && me.photos.length > 0) {
+            const last = me.photos[me.photos.length - 1];
+            setPhotoIndices((prev) => ({ ...prev, [me.id]: me.photos.length - 1 }));
+            setLastSeenPhotoIds((prev) => ({ ...prev, [me.id]: last.id }));
+          }
+        }
+        triggerToast(TOAST_STORY_UPLOADED.icon, TOAST_STORY_UPLOADED.text);
+      } catch (e) {
+        console.log("스토리 업로드 예외:", e);
+        Alert.alert("오류", "스토리를 올리는 중 문제가 생겼어요.");
       }
-      triggerToast(TOAST_STORY_UPLOADED.icon, TOAST_STORY_UPLOADED.text);
     },
-    [members, triggerToast]
+    [loadFamilyData, triggerToast]
   );
 
   const handleOpenPhotoModal = useCallback(() => {
@@ -633,13 +869,13 @@ export default function HomeScreen() {
 
   const handleSelectAlbum = useCallback(async () => {
     const uri = await pickFromLibrary();
-    if (uri) handleAddPhotoSuccess(uri);
-  }, [pickFromLibrary, handleAddPhotoSuccess]);
+    if (uri) await uploadStoryPhoto(uri);
+  }, [pickFromLibrary, uploadStoryPhoto]);
 
   const handleTakePhoto = useCallback(async () => {
     const uri = await pickFromCamera();
-    if (uri) handleAddPhotoSuccess(uri);
-  }, [pickFromCamera, handleAddPhotoSuccess]);
+    if (uri) await uploadStoryPhoto(uri);
+  }, [pickFromCamera, uploadStoryPhoto]);
 
   const handlePhotoViewChange = useCallback(
     (idx: number) => {
@@ -677,9 +913,9 @@ export default function HomeScreen() {
   useEffect(() => {
     const refresh = route.params?.refresh;
     if (refresh === undefined) return;
+    void loadFamilyData({ preserveSelectedMemberId: true });
     mainScrollRef.current?.scrollTo({ y: 0, animated: true });
-    console.log("홈 화면 가족 데이터를 새로고침합니다...");
-  }, [route.params?.refresh]);
+  }, [route.params?.refresh, loadFamilyData]);
 
   useEffect(() => {
     const m = members.find((mm) => mm.id === selectedMemberId);
@@ -718,21 +954,55 @@ export default function HomeScreen() {
     setShowComments(true);
   };
 
-  const handleCommentSubmit = (text: string) => {
-    if (commentPhotoId === null) return;
-    const me = members.find((m) => m.isMine);
-    const newComment: Comment = {
-      id: Date.now(),
-      memberPhotoUri: me?.photoUri,
-      memberNickname: me?.nickname ?? "나",
-      text,
-      createdAt: "방금 전",
-    };
-    setComments((prev) => ({
-      ...prev,
-      [commentPhotoId]: [...(prev[commentPhotoId] || []), newComment],
-    }));
-  };
+  const handleCommentSubmit = useCallback(
+    async (text: string) => {
+      if (commentPhotoId === null) return;
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      const storyIdNum = Math.trunc(Number(commentPhotoId));
+      if (!Number.isFinite(storyIdNum)) {
+        logCommentsApiFailure("comments.insert", new Error("invalid target_id"), {
+          commentPhotoId,
+        });
+        return;
+      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: meRow, error: meErr } = await supabase
+        .from("members")
+        .select("id")
+        .eq("auth_uid", user.id)
+        .single();
+      if (meErr || !meRow) {
+        logCommentsApiFailure("comments.insert", meErr ?? new Error("no meRow"), { phase: "members.select" });
+        return;
+      }
+      const writerIdNum = Math.trunc(Number(meRow.id));
+      if (!Number.isFinite(writerIdNum)) {
+        logCommentsApiFailure("comments.insert", new Error("invalid writer_id"), {
+          meRow,
+          writerIdNum,
+        });
+        return;
+      }
+      const payload = {
+        target_type: "STORY" as const,
+        target_id: storyIdNum,
+        writer_id: writerIdNum,
+        content: trimmed,
+      } as const;
+      const { error } = await supabase.schema("public").from("comments").insert(payload);
+      if (error) {
+        logCommentsApiFailure("comments.insert", error, {
+          table: "public.comments",
+          payload,
+        });
+        return;
+      }
+      await fetchCommentsForStory(storyIdNum);
+    },
+    [commentPhotoId, fetchCommentsForStory]
+  );
 
   const commentCounts = useMemo(() => {
     const counts: Record<number, number> = {};
@@ -787,6 +1057,9 @@ export default function HomeScreen() {
                   onPress={() => {
                     setSelectedMemberId(m.id);
                     setUpdates((prev) => ({ ...prev, [m.id]: false }));
+                    if (!m.isMine) {
+                      void saveLastSeenTimestamp(m.id);
+                    }
                   }}
                   activeOpacity={0.85}
                 >
