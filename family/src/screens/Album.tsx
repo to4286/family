@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import type { RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors } from "../constants/colors";
 import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
+import { supabase } from "../utils/supabase";
 import CheckCircleIcon from "../components/CheckCircleIcon";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -33,8 +34,6 @@ type Folder = {
 // ─── Data ──────────────────────────────────────────────────────────────────────
 
 const FOLDER_COLORS = ["#D4B896", "#C9A882", "#E8C9A0", "#B89878", "#DDBF9A"];
-
-const INITIAL_FOLDERS: Folder[] = [];
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const FOLDER_GAP = 14;
@@ -253,15 +252,76 @@ export default function AlbumScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
   const route = useRoute<RouteProp<MainTabParamList, "Album">>();
   const scrollRef = useRef<ScrollView>(null);
-  const [folders, setFolders] = useState<Folder[]>(INITIAL_FOLDERS);
+  const [folders, setFolders] = useState<Folder[]>([]);
+
+  const loadFolders = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: myMember } = await supabase
+        .from("members")
+        .select("family_id")
+        .eq("auth_uid", user.id)
+        .single();
+
+      if (!myMember) return;
+
+      const { data: albums, error } = await supabase
+        .from("albums")
+        .select("id, name, cover_color, max_count, created_at")
+        .eq("family_id", myMember.family_id)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.log("앨범 목록 조회 실패:", error);
+        return;
+      }
+
+      // 각 앨범의 사진 수와 커버 이미지 조회
+      const folderList: Folder[] = await Promise.all(
+        (albums || []).map(async (album) => {
+          const { count } = await supabase
+            .from("photos")
+            .select("id", { count: "exact", head: true })
+            .eq("album_id", album.id);
+
+          // 가장 최근 사진을 커버로 사용
+          const { data: coverPhoto } = await supabase
+            .from("photos")
+            .select("image_url")
+            .eq("album_id", album.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .single();
+
+          return {
+            id: album.id,
+            name: album.name,
+            count: count || 0,
+            maxCount: album.max_count || 20,
+            coverColor: album.cover_color,
+            coverUri: coverPhoto?.image_url || undefined,
+          };
+        })
+      );
+
+      setFolders(folderList);
+    } catch (e) {
+      console.log("앨범 로딩 실패:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadFolders();
+  }, [loadFolders]);
 
   useEffect(() => {
     const refresh = route.params?.refresh;
     if (refresh === undefined) return;
     scrollRef.current?.scrollTo({ y: 0, animated: true });
-    console.log("새로운 가족 데이터를 불러옵니다...");
-    setFolders(INITIAL_FOLDERS.map((f) => ({ ...f })));
-  }, [route.params?.refresh]);
+    void loadFolders();
+  }, [route.params?.refresh, loadFolders]);
 
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [menuFolder, setMenuFolder] = useState<Folder | null>(null);
@@ -283,32 +343,99 @@ export default function AlbumScreen() {
     }, 1500);
   };
 
-  const handleCreateFolder = (name: string) => {
-    setFolders((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
+  const handleCreateFolder = async (name: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: myMember } = await supabase
+        .from("members")
+        .select("family_id")
+        .eq("auth_uid", user.id)
+        .single();
+
+      if (!myMember) return;
+
+      const coverColor = FOLDER_COLORS[folders.length % FOLDER_COLORS.length];
+
+      const { error } = await supabase.from("albums").insert({
+        family_id: myMember.family_id,
         name,
-        count: 0,
-        maxCount: 20,
-        coverColor: FOLDER_COLORS[prev.length % FOLDER_COLORS.length],
-      },
-    ]);
-    setShowNewFolder(false);
-    triggerToast("✅", "새 앨범이 만들어졌어요");
+        cover_color: coverColor,
+      });
+
+      if (error) {
+        console.log("앨범 생성 실패:", error);
+        return;
+      }
+
+      setShowNewFolder(false);
+      await loadFolders();
+      triggerToast("✅", "새 앨범이 만들어졌어요");
+    } catch (e) {
+      console.log("앨범 생성 예외:", e);
+    }
   };
 
-  const handleRename = (name: string) => {
+  const handleRename = async (name: string) => {
     if (!renameFolder) return;
+
+    const { error } = await supabase
+      .from("albums")
+      .update({ name })
+      .eq("id", renameFolder.id);
+
+    if (error) {
+      console.log("앨범 이름 변경 실패:", error);
+      return;
+    }
+
     setFolders((prev) => prev.map((f) => (f.id === renameFolder.id ? { ...f, name } : f)));
     setRenameFolder(null);
+    triggerToast("✅", "이름 변경이 완료되었습니다");
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteFolder) return;
-    setFolders((prev) => prev.filter((f) => f.id !== deleteFolder.id));
-    setDeleteFolder(null);
-    triggerToast("🗑️", "앨범이 삭제되었어요");
+
+    try {
+      // 1. 앨범 내 사진들의 Storage 파일 삭제
+      const { data: photos } = await supabase
+        .from("photos")
+        .select("image_url")
+        .eq("album_id", deleteFolder.id);
+
+      if (photos && photos.length > 0) {
+        const filePaths = photos
+          .map((p) => {
+            const url = p.image_url;
+            const idx = url.indexOf("/albums/");
+            return idx !== -1 ? url.substring(idx + "/albums/".length) : null;
+          })
+          .filter(Boolean) as string[];
+
+        if (filePaths.length > 0) {
+          await supabase.storage.from("albums").remove(filePaths);
+        }
+      }
+
+      // 2. photos 테이블에서 삭제 (CASCADE로 자동 삭제되지만 명시적으로)
+      await supabase.from("photos").delete().eq("album_id", deleteFolder.id);
+
+      // 3. albums 테이블에서 삭제
+      const { error } = await supabase.from("albums").delete().eq("id", deleteFolder.id);
+
+      if (error) {
+        console.log("앨범 삭제 실패:", error);
+        return;
+      }
+
+      setFolders((prev) => prev.filter((f) => f.id !== deleteFolder.id));
+      setDeleteFolder(null);
+      triggerToast("🗑️", "앨범이 삭제되었어요");
+    } catch (e) {
+      console.log("앨범 삭제 예외:", e);
+    }
   };
 
   return (
