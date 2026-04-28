@@ -17,7 +17,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
-import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, useFocusEffect, type RouteProp } from "@react-navigation/native";
 import type { CompositeNavigationProp } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -566,6 +566,8 @@ export default function HomeScreen() {
 
   const [commentPhotoId, setCommentPhotoId] = useState<number | null>(null);
 
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+
   const route = useRoute<RouteProp<MainTabParamList, "Home">>();
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -574,6 +576,41 @@ export default function HomeScreen() {
       isMountedRef.current = false;
     };
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const checkUnread = async () => {
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const { data: myMember } = await supabase
+            .from("members")
+            .select("id")
+            .eq("auth_uid", user.id)
+            .single();
+
+          if (!myMember) return;
+
+          const { count, error } = await supabase
+            .from("notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("receiver_id", myMember.id)
+            .eq("is_read", false);
+
+          if (!error) {
+            setUnreadNotifCount(count ?? 0);
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+
+      void checkUnread();
+    }, [])
+  );
 
   const loadFamilyData = useCallback(
     async (options?: { preserveSelectedMemberId?: boolean }): Promise<Member[] | null> => {
@@ -1033,7 +1070,7 @@ export default function HomeScreen() {
               fill={Colors.accent}
             />
           </Svg>
-          <View style={styles.notifDot} />
+          {unreadNotifCount > 0 && <View style={styles.notifDot} />}
         </TouchableOpacity>
       </View>
 

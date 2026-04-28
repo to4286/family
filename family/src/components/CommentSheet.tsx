@@ -15,6 +15,8 @@ import {
   Dimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+// 추가할 코드
+import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../constants/colors";
 import { STORY_PHOTO_ASPECT_RATIO } from "../constants/storyPhoto";
 
@@ -133,10 +135,8 @@ export default function CommentSheet({
                       style={styles.commentAvatarImage}
                     />
                   ) : (
-                    <View style={styles.commentAvatar}>
-                      <Text style={styles.commentAvatarFallback}>
-                        {c.memberNickname.charAt(0)}
-                      </Text>
+                    <View style={[styles.commentAvatar, { alignItems: "center", justifyContent: "center" }]}>
+                      <Ionicons name="person" size={20} color={Colors.textHint} />
                     </View>
                   )}
                   <View style={styles.commentContent}>
@@ -161,7 +161,9 @@ export default function CommentSheet({
             {myPhotoUri ? (
               <Image source={{ uri: myPhotoUri }} style={styles.myAvatar} />
             ) : (
-              <View style={[styles.myAvatar, { backgroundColor: Colors.surface }]} />
+              <View style={[styles.myAvatar, { backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center" }]}>
+                <Ionicons name="person" size={18} color={Colors.textHint} />
+              </View>
             )}
             <View style={styles.inputWrap}>
               <TextInput

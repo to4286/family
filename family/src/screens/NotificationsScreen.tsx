@@ -1,5 +1,5 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, Pressable, TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -7,6 +7,7 @@ import Svg, { Path } from "react-native-svg";
 
 import { Colors } from "../constants/colors";
 import type { MainTabStackParamList } from "../navigation/types";
+import { supabase } from "../utils/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,172 +46,22 @@ const NOTIF_TYPES = {
   story_comment: { icon: "💬", iconType: "profile", label: "스토리 댓글" },
 } as const;
 
-// ─── 샘플 데이터 ─────────────────────────────────────────────────────────────
-
-const INITIAL_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: 1,
-    type: "story",
-    nickname: "김철수",
-    message: "새로운 스토리를 올렸어요",
-    subMessage: "지금 무엇을 하고 있는지 확인해보세요.",
-    time: "방금 전",
-    read: false,
-    emoji: null,
-    photoColor: null,
-    memberId: 1,
-    photoId: null,
-    folderId: null,
-    folderName: null,
-    folderCoverColor: null,
-  },
-  {
-    id: 2,
-    type: "poke",
-    nickname: "하은",
-    message: "콕 찔렀어요 👈",
-    subMessage: "가족들에게 지금 무엇을 하고 있는지 알려주세요.",
-    time: "5분 전",
-    read: false,
-    emoji: null,
-    photoColor: null,
-    memberId: 5,
-    photoId: null,
-    folderId: null,
-    folderName: null,
-    folderCoverColor: null,
-  },
-  {
-    id: 3,
-    type: "story_comment",
-    nickname: "이영희",
-    message: "스토리에 댓글을 남겼어요",
-    subMessage: "지수야 밥은 먹었니?",
-    time: "30분 전",
-    read: false,
-    emoji: "👩",
-    photoColor: null,
-    memberId: 3,
-    photoId: 1,
-    folderId: null,
-    folderName: null,
-    folderCoverColor: null,
-  },
-  {
-    id: 4,
-    type: "mood",
-    nickname: "김철수",
-    message: "기분을 변경했어요",
-    subMessage: null,
-    time: "1시간 전",
-    read: false,
-    emoji: null,
-    photoColor: null,
-    memberId: 1,
-    photoId: null,
-    folderId: null,
-    folderName: null,
-    folderCoverColor: null,
-  },
-  {
-    id: 5,
-    type: "story",
-    nickname: "지수",
-    message: "새로운 스토리를 올렸어요",
-    subMessage: "지금 무엇을 하고 있는지 확인해보세요.",
-    time: "3시간 전",
-    read: true,
-    emoji: null,
-    photoColor: null,
-    memberId: 4,
-    photoId: null,
-    folderId: null,
-    folderName: null,
-    folderCoverColor: null,
-  },
-  {
-    id: 6,
-    type: "story_comment",
-    nickname: "민준",
-    message: "스토리에 댓글을 남겼어요",
-    subMessage: "아빠 멋있다!",
-    time: "5시간 전",
-    read: true,
-    emoji: "🧒",
-    photoColor: null,
-    memberId: 3,
-    photoId: 1,
-    folderId: null,
-    folderName: null,
-    folderCoverColor: null,
-  },
-  {
-    id: 7,
-    type: "poke",
-    nickname: "이영희",
-    message: "콕 찔렀어요 👈",
-    subMessage: "가족들에게 지금 무엇을 하고 있는지 알려주세요.",
-    time: "어제",
-    read: true,
-    emoji: null,
-    photoColor: null,
-    memberId: 2,
-    photoId: null,
-    folderId: null,
-    folderName: null,
-    folderCoverColor: null,
-  },
-  {
-    id: 8,
-    type: "comment",
-    nickname: "김철수",
-    message: "사진에 댓글을 남겼어요",
-    subMessage: "우와 어디야?",
-    time: "어제",
-    read: true,
-    emoji: "👨",
-    photoColor: "#C9A882",
-    memberId: 1,
-    photoId: 101,
-    folderId: 1,
-    folderName: "2024 가족 여행",
-    folderCoverColor: "#D4B896",
-  },
-  {
-    id: 9,
-    type: "member",
-    nickname: "지수",
-    message: "가족 공간에 합류했어요",
-    subMessage: null,
-    time: "3일 전",
-    read: true,
-    emoji: null,
-    photoColor: null,
-    memberId: 4,
-    photoId: null,
-    folderId: null,
-    folderName: null,
-    folderCoverColor: null,
-  },
-  {
-    id: 10,
-    type: "notice",
-    nickname: null,
-    message: "서비스 업데이트 안내",
-    subMessage: null,
-    time: "4일 전",
-    read: true,
-    emoji: null,
-    photoColor: null,
-    memberId: null,
-    photoId: null,
-    folderId: null,
-    folderName: null,
-    folderCoverColor: null,
-  },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatRelativeTime(iso: string): string {
+  const d = new Date(iso);
+  const diffMs = Date.now() - d.getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "방금 전";
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "어제";
+  if (days < 7) return `${days}일 전`;
+  if (days < 30) return `${Math.floor(days / 7)}주 전`;
+  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
+}
 
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -251,23 +102,135 @@ function NotifIcon({ notif }: { notif: NotificationItem }) {
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
-  const [notifications, setNotifications] = useState<NotificationItem[]>(
-    INITIAL_NOTIFICATIONS
-  );
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications]
-  );
-
-  const markAllRead = useCallback(() => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
+  const loadNotifications = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: myMember } = await supabase
+        .from("members")
+        .select("id")
+        .eq("auth_uid", user.id)
+        .single();
+
+      if (!myMember) return;
+
+      const { data: rows, error } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("receiver_id", myMember.id)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.log("알림 조회 실패:", error);
+        return;
+      }
+
+      if (!rows || rows.length === 0) {
+        if (isMountedRef.current) setNotifications([]);
+        return;
+      }
+
+      const senderIds = [...new Set(rows.map((r) => r.sender_id).filter(Boolean))];
+      let senderMap = new Map<number, { nickname: string; profile_image_url: string | null }>();
+
+      if (senderIds.length > 0) {
+        const { data: senders } = await supabase
+          .from("members")
+          .select("id, nickname, profile_image_url")
+          .in("id", senderIds);
+
+        if (senders) {
+          senderMap = new Map(senders.map((s) => [s.id, s]));
+        }
+      }
+
+      const mapped: NotificationItem[] = rows.map((r) => {
+        const sender = r.sender_id ? senderMap.get(r.sender_id) : null;
+        const notifType = (r.notif_type || "notice") as NotifTypeKey;
+
+        return {
+          id: r.id,
+          type: notifType,
+          nickname: sender?.nickname || null,
+          message: r.message,
+          subMessage: r.sub_message || null,
+          time: formatRelativeTime(r.created_at),
+          read: r.is_read ?? false,
+          emoji: null,
+          photoColor: null,
+          memberId: r.sender_id || null,
+          photoId: r.photo_id || null,
+          folderId: null,
+          folderName: null,
+          folderCoverColor: null,
+        };
+      });
+
+      if (isMountedRef.current) {
+        setNotifications(mapped);
+      }
+    } catch (e) {
+      console.log("알림 로딩 실패:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
+
+  useEffect(() => {
+    const markAllAsRead = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: myMember } = await supabase
+          .from("members")
+          .select("id")
+          .eq("auth_uid", user.id)
+          .single();
+
+        if (!myMember) return;
+
+        await supabase
+          .from("notifications")
+          .update({ is_read: true })
+          .eq("receiver_id", myMember.id)
+          .eq("is_read", false);
+      } catch (e) {
+        console.log("전체 읽음 처리 실패:", e);
+      }
+    };
+
+    if (notifications.length > 0) {
+      void markAllAsRead();
+    }
+  }, [notifications.length]);
+
   const markRead = useCallback((id: number) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("id", id)
+      .then(({ error }) => {
+        if (error) console.log("읽음 처리 실패:", error);
+      });
   }, []);
 
   const handleNotifPress = useCallback(
@@ -327,34 +290,11 @@ export default function NotificationsScreen() {
   return (
     <View style={[styles.root, rootPadding]}>
       <View style={styles.header}>
-        <View style={styles.headerSideLeft}>
-          <Pressable
-            onPress={() => navigation.goBack()}
-            style={({ pressed }) => [
-              styles.headerBackHit,
-              pressed && styles.headerBackPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="뒤로 가기"
-          >
-            <ChevronLeftIcon size={32} color={Colors.textSub} />
-          </Pressable>
-        </View>
-        <View style={styles.headerTitleSlot}>
-          <Text style={styles.headerTitle}>알림</Text>
-        </View>
-        <View style={styles.headerSideRight}>
-          {unreadCount > 0 ? (
-            <Pressable
-              onPress={markAllRead}
-              style={({ pressed }) => pressed && styles.markAllPressed}
-              accessibilityRole="button"
-              accessibilityLabel="전체 읽음"
-            >
-              <Text style={styles.markAllText}>전체 읽음</Text>
-            </Pressable>
-          ) : null}
-        </View>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.6}>
+          <ChevronLeftIcon size={32} color={Colors.textSub} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>알림</Text>
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView
@@ -368,7 +308,12 @@ export default function NotificationsScreen() {
       >
         {notifications.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyBell}>🔔</Text>
+            <Svg width={40} height={40} viewBox="0 0 24 24" fill="none" style={styles.overlayIcon}>
+              <Path
+                d="M8.35206 20.242C8.78721 20.7922 9.34171 21.2364 9.97367 21.541C10.6056 21.8455 11.2985 22.0025 12.0001 22C12.7016 22.0025 13.3945 21.8455 14.0264 21.541C14.6584 21.2364 15.2129 20.7922 15.6481 20.242C13.2271 20.5697 10.773 20.5697 8.35206 20.242ZM18.7501 9V9.704C18.7501 10.549 18.9901 11.375 19.4421 12.078L20.5501 13.801C21.5611 15.375 20.7891 17.514 19.0301 18.011C14.4338 19.3127 9.56635 19.3127 4.97006 18.011C3.21106 17.514 2.43906 15.375 3.45006 13.801L4.55806 12.078C5.01127 11.3692 5.25178 10.5453 5.25106 9.704V9C5.25106 5.134 8.27306 2 12.0001 2C15.7271 2 18.7501 5.134 18.7501 9Z"
+                fill={Colors.accent}
+              />
+            </Svg>
             <Text style={styles.emptyText}>아직 알림이 없어요</Text>
           </View>
         ) : (
@@ -415,54 +360,27 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   header: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
     backgroundColor: Colors.white,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
   },
-  headerSideLeft: {
-    width: 80,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    marginLeft: -16,
-  },
-  headerSideRight: {
-    width: 80,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-  },
-  headerTitleSlot: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontFamily: "Pretendard-Medium",
-    color: Colors.text,
-  },
-  headerBackHit: {
+  backBtn: {
     width: 44,
     height: 44,
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: -8,
   },
-  headerBackPressed: {
-    opacity: 0.6,
-  },
-  markAllText: {
-    fontSize: 13,
-    color: Colors.accent,
-    fontFamily: "Pretendard-Medium",
-  },
-  markAllPressed: {
-    opacity: 0.7,
+  headerTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: "NanumSquareRound-Bold",
+    color: Colors.text,
+    textAlign: "center",
   },
   scroll: {
     flex: 1,
@@ -471,21 +389,21 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   scrollContentEmpty: {
-    justifyContent: "center",
+    justifyContent: "flex-start",
   },
   empty: {
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 80,
-    gap: 12,
+    justifyContent: "flex-start",
+    paddingTop: 200,
+    gap: 16,
   },
-  emptyBell: {
-    fontSize: 40,
-    fontFamily: "Pretendard-Regular",
+  overlayIcon: {
+    fontSize: 28,
+    marginBottom: 8,
   },
   emptyText: {
-    fontSize: 14,
-    fontFamily: "Pretendard-Regular",
+    fontSize: 17,
+    fontFamily: "NanumSquareRound-Bold",
     color: Colors.textHint,
   },
   row: {
