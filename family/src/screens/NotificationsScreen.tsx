@@ -173,7 +173,7 @@ export default function NotificationsScreen() {
           photoColor: null,
           memberId: r.sender_id || null,
           photoId: r.photo_id || null,
-          folderId: null,
+          folderId: r.album_id || null,
           folderName: null,
           folderCoverColor: null,
         };
@@ -234,40 +234,102 @@ export default function NotificationsScreen() {
   }, []);
 
   const handleNotifPress = useCallback(
-    (notif: NotificationItem) => {
+    async (notif: NotificationItem) => {
       markRead(notif.id);
 
       switch (notif.type) {
         case "mood":
         case "story":
         case "member":
-          navigation.navigate("MainTab" as any, {
-            screen: "Home",
-            params: { selectedMemberId: notif.memberId },
-          });
+          navigation.goBack();
+          setTimeout(() => {
+            navigation.navigate("MainTab" as any, {
+              screen: "Home",
+              params: { selectedMemberId: notif.memberId, _ts: Date.now() },
+            });
+          }, 100);
           break;
 
         case "poke":
+          // 콕 찌르기 → 홈화면으로 이동 (내 프로필 선택)
           navigation.navigate("MainTab" as any, {
             screen: "Home",
-            params: { selectedMemberId: 3 },
           });
           break;
 
         case "story_comment":
-          navigation.navigate("MainTab" as any, {
-            screen: "Home",
-            params: {
-              selectedMemberId: notif.memberId,
-              openCommentPhotoId: notif.photoId,
-            },
-          });
+          navigation.goBack();
+          setTimeout(() => {
+            navigation.navigate("MainTab" as any, {
+              screen: "Home",
+              params: {
+                selectedMemberId: notif.memberId,
+                openCommentPhotoId: notif.photoId,
+                _ts: Date.now(),
+              },
+            });
+          }, 100);
           break;
 
         case "comment":
-        case "album":
+          // 앨범 댓글 → 해당 사진 상세로 이동
           if (notif.photoId !== null) {
-            navigation.navigate("AlbumDetail", { photoId: notif.photoId } as any);
+            try {
+              const { data: photo } = await supabase
+                .from("photos")
+                .select("id, image_url, created_at, album_id")
+                .eq("id", notif.photoId)
+                .single();
+
+              if (photo) {
+                const { data: album } = await supabase
+                  .from("albums")
+                  .select("id, name, max_count, cover_color")
+                  .eq("id", photo.album_id)
+                  .single();
+
+                const d = new Date(photo.created_at);
+                const formattedDate = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+
+                navigation.navigate("AlbumDetail", {
+                  photoId: photo.id,
+                  imageUri: photo.image_url,
+                  uploadedAt: formattedDate,
+                  folderId: album?.id || photo.album_id,
+                  folderName: album?.name || "",
+                  folderCount: 0,
+                  folderMaxCount: album?.max_count || 20,
+                  folderCoverColor: album?.cover_color || "#D4B896",
+                });
+              }
+            } catch (e) {
+              console.log("댓글 알림 이동 실패:", e);
+            }
+          }
+          break;
+
+        case "album":
+          // 사진 등록 → 해당 앨범으로 이동
+          if (notif.folderId !== null) {
+            try {
+              const { data: album } = await supabase
+                .from("albums")
+                .select("id, name, max_count, cover_color")
+                .eq("id", notif.folderId)
+                .single();
+
+              if (album) {
+                navigation.navigate("AlbumPhotos", {
+                  folderId: album.id,
+                  folderName: album.name,
+                  folderCount: 0,
+                  folderMaxCount: album.max_count || 20,
+                  folderCoverColor: album.cover_color || "#D4B896",
+                });
+              }
+            } catch (e) {
+              console.log("앨범 알림 이동 실패:", e);
+            }
           }
           break;
 

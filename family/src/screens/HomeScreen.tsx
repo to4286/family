@@ -568,6 +568,8 @@ export default function HomeScreen() {
 
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
+  const myMemberRef = useRef<{ id: number; familyId: number } | null>(null);
+
   const route = useRoute<RouteProp<MainTabParamList, "Home">>();
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -616,21 +618,27 @@ export default function HomeScreen() {
     async (options?: { preserveSelectedMemberId?: boolean }): Promise<Member[] | null> => {
       try {
         const lastSeenMap = await loadLastSeenTimestamps();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return null;
 
-        const { data: myMember } = await supabase
-          .from("members")
-          .select("id, family_id")
-          .eq("auth_uid", user.id)
-          .single();
+        let myMember = myMemberRef.current;
+        if (!myMember) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return null;
 
-        if (!myMember) return null;
+          const { data: memberData } = await supabase
+            .from("members")
+            .select("id, family_id")
+            .eq("auth_uid", user.id)
+            .single();
+
+          if (!memberData) return null;
+          myMember = { id: memberData.id, familyId: memberData.family_id };
+          myMemberRef.current = myMember;
+        }
 
         const { data: family } = await supabase
           .from("families")
           .select("family_type, invite_code")
-          .eq("id", myMember.family_id)
+          .eq("id", myMember.familyId)
           .single();
 
         if (family) {
@@ -645,7 +653,7 @@ export default function HomeScreen() {
         const { data: familyMembers } = await supabase
           .from("members")
           .select("id, nickname, profile_image_url, current_mood, role_type")
-          .eq("family_id", myMember.family_id);
+          .eq("family_id", myMember.familyId);
 
         if (!familyMembers) return null;
 
@@ -794,9 +802,19 @@ export default function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    void loadFamilyData();
-  }, [loadFamilyData]);
+  useFocusEffect(
+    useCallback(() => {
+      const params = route.params as
+        | { selectedMemberId?: number; _ts?: number }
+        | undefined;
+
+      // 알림에서 특정 멤버로 이동한 경우 → 여기서 새로고침하지 않음 (route.params useEffect에서 처리)
+      if (params?._ts) return;
+
+      // GNB 탭, 뒤로가기 등 일반 진입 → 기본(내 프로필) 새로고침
+      void loadFamilyData();
+    }, [loadFamilyData, route.params])
+  );
 
   useEffect(() => {
     if (showComments && commentPhotoId != null) {
@@ -809,10 +827,18 @@ export default function HomeScreen() {
       | {
           selectedMemberId?: number;
           openCommentPhotoId?: number;
+          _ts?: number;
         }
       | undefined;
 
-    if (params?.selectedMemberId) {
+    if (params?.selectedMemberId && params?._ts) {
+      loadFamilyData({ preserveSelectedMemberId: true }).then(() => {
+        setSelectedMemberId(params.selectedMemberId!);
+        setUpdates((prev) => ({ ...prev, [params.selectedMemberId!]: false }));
+        // _ts 초기화하여 다음 포커스 시 일반 새로고침 가능하게
+        navigation.setParams({ selectedMemberId: undefined, _ts: undefined } as any);
+      });
+    } else if (params?.selectedMemberId) {
       setSelectedMemberId(params.selectedMemberId);
       setUpdates((prev) => ({ ...prev, [params.selectedMemberId!]: false }));
     }
