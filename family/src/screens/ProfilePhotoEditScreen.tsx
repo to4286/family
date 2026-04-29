@@ -1,5 +1,16 @@
 import React, { useState, useRef, useEffect } from "react";
-import { View, Text, TouchableOpacity, TouchableWithoutFeedback, StyleSheet, Modal, Image } from "react-native";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  StyleSheet,
+  Modal,
+  Image,
+  Alert,
+} from "react-native";
+import { File } from "expo-file-system/next";
+import { decode } from "base64-arraybuffer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -8,6 +19,8 @@ import { Colors } from "../constants/colors";
 import type { MainTabStackParamList } from "../navigation/types";
 import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
 import PhotoSelectionModal from "../components/PhotoSelectionModal";
+import { supabase } from "../utils/supabase";
+import { compressImage } from "../utils/imageCompress";
 
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -34,6 +47,7 @@ export default function ProfilePhotoEditScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
   const { pickFromLibrary, pickFromCamera } = useStoryImagePicker();
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [memberId, setMemberId] = useState<number | null>(null);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [isChanged, setIsChanged] = useState(false);
   const hasPhoto = imageUri != null;
@@ -43,6 +57,33 @@ export default function ProfilePhotoEditScreen() {
   useEffect(() => {
     navigation.setOptions({ gestureEnabled: false });
   }, [navigation]);
+
+  useEffect(() => {
+    const fetchProfileData = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data } = await supabase
+          .from("members")
+          .select("id, profile_image_url")
+          .eq("auth_uid", user.id)
+          .single();
+
+        if (data) {
+          setMemberId(data.id);
+          if (data.profile_image_url) {
+            setImageUri(data.profile_image_url);
+          }
+        }
+      } catch (error) {
+        console.log("프로필 불러오기 실패:", error);
+      }
+    };
+    fetchProfileData();
+  }, []);
 
   const handleBackPress = () => {
     if (isChanged && !isSaving.current) {
@@ -55,6 +96,65 @@ export default function ProfilePhotoEditScreen() {
   const handleConfirmExit = () => {
     setShowExitConfirm(false);
     navigation.goBack();
+  };
+
+  const handleSave = async () => {
+    if (!memberId || !imageUri) return;
+    isSaving.current = true;
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("로그인 정보를 찾을 수 없습니다.");
+
+      let publicUrl = imageUri;
+
+      // 새로 선택한 로컬 이미지(file://)인 경우에만 업로드 실행
+      if (imageUri.startsWith("file://")) {
+        const compressedUri = await compressImage(imageUri);
+        const file = new File(compressedUri);
+        const base64 = await file.base64();
+
+        if (!base64) throw new Error("이미지 변환 실패");
+
+        // 캐시 문제 방지를 위해 파일명에 타임스탬프 추가
+        const storagePath = `${user.id}/profile_${Date.now()}.jpg`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("profiles")
+          .upload(storagePath, decode(base64), {
+            contentType: "image/jpeg",
+            upsert: false,
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage.from("profiles").getPublicUrl(storagePath);
+        publicUrl = urlData.publicUrl;
+      }
+
+      const { error: updateError } = await supabase
+        .from("members")
+        .update({ profile_image_url: publicUrl })
+        .eq("id", memberId);
+
+      if (updateError) throw updateError;
+
+      (navigation as any).navigate("MainTab", {
+        screen: "MyPage",
+        params: {
+          toastIcon: "✅",
+          toastText: "프로필 사진이 변경되었어요",
+          profileImageUri: publicUrl,
+        },
+        merge: true,
+      });
+    } catch (error) {
+      console.log("프로필 사진 변경 실패:", error);
+      Alert.alert("오류", "프로필 사진 변경에 실패했습니다. 다시 시도해주세요.");
+      isSaving.current = false;
+    }
   };
 
   return (
@@ -93,18 +193,7 @@ export default function ProfilePhotoEditScreen() {
         </View>
         <BtnPrimary
           label="저장하기"
-          onPress={() => {
-            isSaving.current = true;
-            (navigation as { navigate: (n: string, p?: object) => void }).navigate("MainTab", {
-              screen: "MyPage",
-              params: {
-                toastIcon: "✅",
-                toastText: "프로필 사진이 변경되었어요",
-                ...(imageUri ? { profileImageUri: imageUri } : {}),
-              },
-              merge: true,
-            });
-          }}
+          onPress={handleSave}
           disabled={!isChanged}
         />
         <PhotoSelectionModal
