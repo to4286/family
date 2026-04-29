@@ -11,6 +11,7 @@ import {
   Keyboard,
   StyleSheet,
   Modal,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -18,16 +19,14 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import type { MainTabStackParamList } from "../navigation/types";
+import { supabase } from "../utils/supabase";
 
 const FAMILY_TYPES = [
-  "웃음이 끊이지 않는 가족",
-  "대화가 많은 가족",
-  "함께 있을 때 편안한 가족",
+  "웃음이 가득한 가족",
+  "서로 존중하는 가족",
+  "배려가 많은 가족",
   "기타 (직접 입력)",
 ];
-
-const INITIAL_SELECTED = 1;
-const INITIAL_CUSTOM = "";
 
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -53,11 +52,15 @@ export default function FamilyTypeEditScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
   const scrollRef = useRef<ScrollView>(null);
-  const [selected, setSelected] = useState<number | null>(INITIAL_SELECTED);
-  const [customText, setCustomText] = useState(INITIAL_CUSTOM);
+  const [familyId, setFamilyId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [customText, setCustomText] = useState("");
+  const [initialSelected, setInitialSelected] = useState<number | null>(null);
+  const [initialCustom, setInitialCustom] = useState("");
+
   const lastIndex = FAMILY_TYPES.length - 1;
   const isCustomSelected = selected === lastIndex;
-  const hasChanges = selected !== INITIAL_SELECTED || customText !== INITIAL_CUSTOM;
+  const hasChanges = selected !== initialSelected || customText !== initialCustom;
   const canSave =
     selected !== null && (isCustomSelected ? customText.trim().length > 0 : true) && hasChanges;
 
@@ -67,6 +70,51 @@ export default function FamilyTypeEditScreen() {
   useEffect(() => {
     navigation.setOptions({ gestureEnabled: false });
   }, [navigation]);
+
+  useEffect(() => {
+    const fetchFamilyType = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: myMember } = await supabase
+          .from("members")
+          .select("family_id")
+          .eq("auth_uid", user.id)
+          .single();
+
+        if (!myMember) return;
+        setFamilyId(myMember.family_id);
+
+        const { data: family } = await supabase
+          .from("families")
+          .select("family_type")
+          .eq("id", myMember.family_id)
+          .single();
+
+        if (family && family.family_type) {
+          const typeText = family.family_type;
+          const index = FAMILY_TYPES.findIndex((t) => t === typeText);
+
+          if (index !== -1 && index !== lastIndex) {
+            setSelected(index);
+            setInitialSelected(index);
+          } else {
+            // 리스트에 없는 값이면 '기타(직접 입력)' 처리
+            setSelected(lastIndex);
+            setInitialSelected(lastIndex);
+            setCustomText(typeText);
+            setInitialCustom(typeText);
+          }
+        }
+      } catch (error) {
+        console.log("가족 유형 불러오기 실패:", error);
+      }
+    };
+    fetchFamilyType();
+  }, [lastIndex]);
 
   const handleBackPress = () => {
     if (hasChanges && !isSaving.current) {
@@ -80,6 +128,39 @@ export default function FamilyTypeEditScreen() {
   const handleConfirmExit = () => {
     setShowExitConfirm(false);
     navigation.goBack();
+  };
+
+  const handleSave = async () => {
+    if (!familyId || selected === null) return;
+    isSaving.current = true;
+
+    try {
+      const familyTypeText =
+        selected === lastIndex ? customText.trim() : FAMILY_TYPES[selected];
+
+      const { data, error } = await supabase
+        .from("families")
+        .update({ family_type: familyTypeText })
+        .eq("id", familyId)
+        .select();
+
+      if (error) throw error;
+
+      // 권한(RLS) 문제로 업데이트가 무시되어 빈 배열이 돌아오면 에러 강제 발생
+      if (!data || data.length === 0) {
+        throw new Error("DB 업데이트 권한이 차단되었습니다. (Supabase RLS 정책 필요)");
+      }
+
+      (navigation as any).navigate("MainTab", {
+        screen: "MyPage",
+        params: { toastIcon: "✅", toastText: "가족 유형이 변경되었어요" },
+        merge: true,
+      });
+    } catch (error) {
+      console.log("가족 유형 변경 실패:", error);
+      Alert.alert("오류", "가족 유형 변경에 실패했습니다. 다시 시도해주세요.");
+      isSaving.current = false;
+    }
   };
 
   return (
@@ -165,14 +246,7 @@ export default function FamilyTypeEditScreen() {
             >
               <BtnPrimary
                 label="저장하기"
-                onPress={() => {
-                  isSaving.current = true;
-                  (navigation as { navigate: (n: string, p?: object) => void }).navigate("MainTab", {
-                    screen: "MyPage",
-                    params: { toastIcon: "✅", toastText: "가족 유형이 변경되었어요" },
-                    merge: true,
-                  });
-                }}
+                onPress={handleSave}
                 disabled={!canSave}
               />
             </View>

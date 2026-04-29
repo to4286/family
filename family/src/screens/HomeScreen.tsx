@@ -643,7 +643,7 @@ export default function HomeScreen() {
 
         if (family) {
           const typeText = family.family_type || "우리 가족";
-          const truncated = typeText.length > 9 ? typeText.slice(0, 9) + "..." : typeText;
+          const truncated = typeText.length > 11 ? typeText.slice(0, 11) + "..." : typeText;
           if (isMountedRef.current) {
             setFamilyTitle(`${truncated} 🏡`);
             setInviteCode(family.invite_code || "");

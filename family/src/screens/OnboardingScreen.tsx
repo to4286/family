@@ -57,7 +57,7 @@ const FAMILY_TYPES = [
   "웃음이 가득한 가족",
   "서로 존중하는 가족",
   "배려가 많은 가족",
-  "기타 (직접 입력)",
+  "직접 입력",
 ];
 
 const AGREEMENT_ITEMS = [
