@@ -12,7 +12,7 @@ import {
   Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Colors } from "../constants/colors";
@@ -43,7 +43,7 @@ const HEADER_MIN_HEIGHT = 66;
 
 const FOLDER_MENU_BTN_SIZE = 32;
 const FOLDER_MENU_BTN_OFFSET = 12;
-const FOLDER_MENU_BTN_OVERLAY = "rgba(0,0,0,0.3)";
+const FOLDER_MENU_BTN_OVERLAY = "rgba(0,0,0,0.7)";
 const FOLDER_MENU_DOT_GAP = 3;
 const FOLDER_MENU_DOT_SIZE = 4;
 
@@ -312,9 +312,11 @@ export default function AlbumScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    void loadFolders();
-  }, [loadFolders]);
+  useFocusEffect(
+    useCallback(() => {
+      loadFolders();
+    }, [loadFolders])
+  );
 
   useEffect(() => {
     const refresh = route.params?.refresh;

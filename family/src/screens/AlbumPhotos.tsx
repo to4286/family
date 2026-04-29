@@ -391,6 +391,23 @@ export default function AlbumPhotosScreen({ route }: Props) {
         }
       }
 
+      try {
+        const { data: myMemberData } = await supabase
+          .from("members")
+          .select("id")
+          .eq("auth_uid", user.id)
+          .single();
+
+        if (myMemberData) {
+          await supabase.rpc("fn_notif_album_upload", {
+            p_album_id: Number(folderId),
+            p_uploader_id: myMemberData.id,
+          });
+        }
+      } catch (notifErr) {
+        console.log("앨범 알림 발송 실패:", notifErr);
+      }
+
       await loadPhotos();
 
       triggerToast("✅", `${pickedAssets.length}장의 사진이 추가되었어요`);

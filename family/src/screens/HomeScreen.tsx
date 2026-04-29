@@ -1187,9 +1187,29 @@ export default function HomeScreen() {
                     nickname={selectedMember.nickname}
                     onCommentPress={handleOpenComments}
                     commentCounts={commentCounts}
-                    onPoke={() =>
-                      triggerToast("👈", `${selectedMember.nickname}님을 콕 찔렀어요`)
-                    }
+                    onPoke={async () => {
+                      try {
+                        const { data: { user } } = await supabase.auth.getUser();
+                        if (!user) return;
+
+                        const { data: myMember } = await supabase
+                          .from("members")
+                          .select("id")
+                          .eq("auth_uid", user.id)
+                          .single();
+
+                        if (!myMember) return;
+
+                        await supabase.from("pokes").insert({
+                          sender_id: myMember.id,
+                          receiver_id: selectedMember.id,
+                        });
+
+                        triggerToast("👈", `${selectedMember.nickname}님을 콕 찔렀어요`);
+                      } catch (e) {
+                        console.log("콕 찌르기 실패:", e);
+                      }
+                    }}
                   />
                   <TouchableOpacity
                     style={styles.learnMoreBtn}
