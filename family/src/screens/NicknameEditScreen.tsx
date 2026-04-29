@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Modal,
   Keyboard,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -17,9 +18,9 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import type { MainTabStackParamList } from "../navigation/types";
+import { supabase } from "../utils/supabase";
 
 const MAX_NICKNAME = 6;
-const INITIAL_NICKNAME = "민준";
 
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -45,15 +46,43 @@ export default function NicknameEditScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
 
-  const [nickname, setNickname] = useState(INITIAL_NICKNAME);
+  const [nickname, setNickname] = useState("");
+  const [initialNickname, setInitialNickname] = useState("");
+  const [memberId, setMemberId] = useState<number | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const isSaving = useRef(false);
-  const hasChanges = nickname !== INITIAL_NICKNAME;
+  const hasChanges = nickname !== initialNickname;
 
   useEffect(() => {
     navigation.setOptions({ gestureEnabled: false });
   }, [navigation]);
+
+  useEffect(() => {
+    const fetchNickname = async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data } = await supabase
+          .from("members")
+          .select("id, nickname")
+          .eq("auth_uid", user.id)
+          .single();
+
+        if (data) {
+          setMemberId(data.id);
+          setNickname(data.nickname || "");
+          setInitialNickname(data.nickname || "");
+        }
+      } catch (error) {
+        console.log("닉네임 불러오기 실패:", error);
+      }
+    };
+    fetchNickname();
+  }, []);
 
   const handleBackPress = () => {
     if (hasChanges && !isSaving.current) {
@@ -64,13 +93,33 @@ export default function NicknameEditScreen() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!memberId) return;
     isSaving.current = true;
-    (navigation as { navigate: (n: string, p?: object) => void }).navigate("MainTab", {
-      screen: "MyPage",
-      params: { toastIcon: "✅", toastText: "닉네임이 변경되었어요" },
-      merge: true,
-    });
+
+    try {
+      const updatedNickname = nickname.trim();
+      const { error } = await supabase
+        .from("members")
+        .update({ nickname: updatedNickname })
+        .eq("id", memberId);
+
+      if (error) throw error;
+
+      (navigation as { navigate: (n: string, p?: object) => void }).navigate("MainTab", {
+        screen: "MyPage",
+        params: {
+          toastIcon: "✅",
+          toastText: "닉네임이 변경되었어요",
+          updatedNickname: updatedNickname,
+        },
+        merge: true,
+      });
+    } catch (error) {
+      console.log("닉네임 변경 실패:", error);
+      Alert.alert("오류", "닉네임 변경에 실패했습니다. 다시 시도해주세요.");
+      isSaving.current = false;
+    }
   };
 
   const handleConfirmExit = () => {

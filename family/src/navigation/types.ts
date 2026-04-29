@@ -5,7 +5,12 @@ export type OnboardingStackParamList = {
 export type MainTabParamList = {
   Home: { refresh?: number } | undefined;
   Album: { refresh?: number } | undefined;
-  MyPage: { toastText?: string; toastIcon?: string; profileImageUri?: string } | undefined;
+  MyPage: {
+    toastText?: string;
+    toastIcon?: string;
+    profileImageUri?: string;
+    updatedNickname?: string;
+  } | undefined;
 };
 
 /** 탭 위에 알림 등 오버레이 화면을 올릴 때 사용하는 스택 */

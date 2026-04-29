@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -6,12 +6,13 @@ import {
   TouchableOpacity,
   Image,
   ScrollView,
-  Alert,
   Animated,
   Modal,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import { supabase } from "../utils/supabase";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
@@ -40,6 +41,12 @@ const headerControlShadow = {
 const BOTTOM_SHEET_SLIDE_OFFSET = 300;
 const BOTTOM_SHEET_OPEN_MS = 250;
 const BOTTOM_SHEET_CLOSE_MS = 200;
+
+const ROLE_MAPPING: Record<string, string> = {
+  "아빠": "든든한 버팀목",
+  "엄마": "따뜻한 햇살",
+  "자녀": "사랑스러운 복덩이",
+};
 
 function ProfileMenuModal({
   visible,
@@ -111,14 +118,60 @@ export default function MypageScreen() {
   const [toastContent, setToastContent] = useState({ icon: "", text: "" });
   const toastAnim = useRef(new Animated.Value(TOAST_SLIDE_OFFSCREEN_PX)).current;
 
-  const [profilePhotoUri, setProfilePhotoUri] = useState("https://i.pravatar.cc/150?img=33");
+  const [profilePhotoUri, setProfilePhotoUri] = useState<string | null>(null);
+  const [nickname, setNickname] = useState("");
+  const [roleType, setRoleType] = useState("");
+  const [familyType, setFamilyType] = useState("");
+
+  const loadMyPageData = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: myMember } = await supabase
+        .from("members")
+        .select("nickname, profile_image_url, role_type, family_id")
+        .eq("auth_uid", user.id)
+        .single();
+
+      if (!myMember) return;
+
+      setNickname(myMember.nickname || "");
+      setProfilePhotoUri(myMember.profile_image_url || null);
+      setRoleType(myMember.role_type || "");
+
+      const { data: family } = await supabase
+        .from("families")
+        .select("family_type")
+        .eq("id", myMember.family_id)
+        .single();
+
+      if (family) {
+        setFamilyType(family.family_type || "");
+      }
+    } catch (e) {
+      console.log("마이페이지 로딩 실패:", e);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadMyPageData();
+    }, [loadMyPageData])
+  );
 
   useEffect(() => {
     if (route.params?.profileImageUri) {
       setProfilePhotoUri(route.params.profileImageUri);
       navigation.setParams({ profileImageUri: undefined } as never);
     }
-  }, [route.params?.profileImageUri, navigation]);
+    if (route.params?.updatedNickname) {
+      setNickname(route.params.updatedNickname);
+      navigation.setParams({ updatedNickname: undefined } as never);
+    }
+  }, [route.params?.profileImageUri, route.params?.updatedNickname, navigation]);
 
   useEffect(() => {
     const text = route.params?.toastText;
@@ -143,10 +196,6 @@ export default function MypageScreen() {
     // 토스트 트리거는 toastText만 구독 — 조기 setParams로 타이머가 끊기지 않게 위에서 처리
     // eslint-disable-next-line react-hooks/exhaustive-deps -- params 초기화는 퇴장 애니 끝에서만
   }, [route.params?.toastText]);
-
-  const handleCopyCode = () => {
-    Alert.alert("알림", "초대 코드가 복사되었습니다!");
-  };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -175,11 +224,27 @@ export default function MypageScreen() {
         <View style={[styles.card, styles.sectionCard]}>
           <Text style={styles.sectionTitle}>내 정보</Text>
           <View style={styles.profileRow}>
-            <Image source={{ uri: profilePhotoUri }} style={styles.profileImageRow} resizeMode="cover" />
+            {profilePhotoUri ? (
+              <Image source={{ uri: profilePhotoUri }} style={styles.profileImageRow} resizeMode="cover" />
+            ) : (
+              <View
+                style={[
+                  styles.profileImageRow,
+                  { alignItems: "center", justifyContent: "center", backgroundColor: Colors.surface },
+                ]}
+              >
+                <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+                  <Path
+                    d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z"
+                    fill={Colors.textHint}
+                  />
+                </Svg>
+              </View>
+            )}
             <View style={styles.profileInfo}>
-              <Text style={styles.nicknameText}>민준</Text>
+              <Text style={styles.nicknameText}>{nickname}</Text>
               <View style={styles.typeBadgeRow}>
-                <Text style={styles.typeTextRow}>든든한 버팀목</Text>
+                <Text style={styles.typeTextRow}>{ROLE_MAPPING[roleType] || roleType}</Text>
               </View>
             </View>
             <TouchableOpacity
@@ -195,16 +260,6 @@ export default function MypageScreen() {
         {/* --- 두 번째 레이아웃: 가족 관리 --- */}
         <View style={[styles.card, styles.sectionCard]}>
           <Text style={styles.sectionTitle}>가족 관리</Text>
-          <View style={styles.listItem}>
-            <Text style={styles.listLabel}>초대 코드</Text>
-            <View style={styles.listValueRow}>
-              <Text style={styles.inlineCodeText}>ABC-1234</Text>
-              <TouchableOpacity style={styles.copyBtn} onPress={handleCopyCode}>
-                <Text style={styles.copyBtnText}>복사</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-          <View style={styles.divider} />
           <TouchableOpacity
             style={styles.listItem}
             activeOpacity={0.7}
@@ -212,7 +267,7 @@ export default function MypageScreen() {
           >
             <Text style={styles.listLabel}>가족 유형 변경</Text>
             <View style={styles.listValueRow}>
-              <Text style={styles.listValue}>대화가 많은 우리 가족 🏡</Text>
+              <Text style={styles.listValue}>{familyType ? `${familyType} 🏡` : "설정되지 않음"}</Text>
               <Text style={styles.arrow}>{">"}</Text>
             </View>
           </TouchableOpacity>
@@ -221,17 +276,29 @@ export default function MypageScreen() {
         {/* --- 세 번째 레이아웃: 기타 --- */}
         <View style={[styles.card, styles.sectionCard]}>
           <Text style={styles.sectionTitle}>기타</Text>
-          <TouchableOpacity style={styles.listItem} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.listItem}
+            activeOpacity={0.7}
+            onPress={() => Linking.openURL("https://www.notion.so/351f9aeb2c478086bb57e3984441b784")}
+          >
             <Text style={styles.listLabel}>문의하기</Text>
             <Text style={styles.arrow}>{">"}</Text>
           </TouchableOpacity>
           <View style={styles.divider} />
-          <TouchableOpacity style={styles.listItem} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.listItem}
+            activeOpacity={0.7}
+            onPress={() => Linking.openURL("https://www.notion.so/34ff9aeb2c4780e4bac3cdbbc8e7d777")}
+          >
             <Text style={styles.listLabel}>서비스 이용약관 동의</Text>
             <Text style={styles.arrow}>{">"}</Text>
           </TouchableOpacity>
           <View style={styles.divider} />
-          <TouchableOpacity style={styles.listItem} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.listItem}
+            activeOpacity={0.7}
+            onPress={() => Linking.openURL("https://www.notion.so/34ff9aeb2c4780249717cfbe6ff7480a")}
+          >
             <Text style={styles.listLabel}>개인정보 처리방침</Text>
             <Text style={styles.arrow}>{">"}</Text>
           </TouchableOpacity>
@@ -338,7 +405,7 @@ const styles = StyleSheet.create({
     fontSize: 16, // 18에서 16으로 축소
     fontFamily: "NanumSquareRound-Bold",
     color: Colors.text,
-    marginBottom: 4, // 6에서 4로 축소
+    marginBottom: 8, // 6에서 4로 축소
   },
   typeBadgeRow: {
     alignSelf: "flex-start",
