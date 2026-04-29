@@ -188,7 +188,14 @@ function MainTabNavigator() {
 
 function MainTabStackNavigator() {
   return (
-    <MainTabStack.Navigator screenOptions={{ headerShown: false }}>
+    <MainTabStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        animation: "ios_from_right",
+        fullScreenGestureEnabled: true,
+        contentStyle: { backgroundColor: Colors.bg },
+      }}
+    >
       <MainTabStack.Screen name="MainTab" component={MainTabNavigator} />
       <MainTabStack.Screen
         name="Notifications"
