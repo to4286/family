@@ -238,9 +238,12 @@ export default function NotificationsScreen() {
       markRead(notif.id);
 
       switch (notif.type) {
+        case "member":
+          // 가족 참여 알림은 화면 이동 없이 읽음 처리만 수행 (markRead는 상단에서 이미 실행됨)
+          break;
+
         case "mood":
         case "story":
-        case "member":
           navigation.goBack();
           setTimeout(() => {
             navigation.navigate("MainTab" as any, {

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -9,9 +9,13 @@ import {
   TextInput,
   Platform,
   Linking,
+  Alert,
+  KeyboardAvoidingView,
+  Keyboard,
 } from "react-native";
+import * as Notifications from "expo-notifications";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import { supabase } from "../utils/supabase";
@@ -100,87 +104,137 @@ function LogoutModal({ visible, onClose, onConfirm }: any) {
   );
 }
 
-function WithdrawModal({ visible, onClose }: any) {
+function WithdrawModal({
+  visible,
+  onClose,
+  onWithdraw,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onWithdraw: () => void;
+}) {
   const [step, setStep] = useState(1);
   const [selected, setSelected] = useState<number | null>(null);
   const [customText, setCustomText] = useState("");
+  // 🚀 키보드 상태를 추적하는 State 추가
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   const isEtc = selected === WITHDRAW_REASONS.length - 1;
   const canNext = selected !== null && (!isEtc || customText.trim().length > 0);
 
-  // 모달 닫힐 때 상태 초기화
+  useEffect(() => {
+    if (visible) {
+      setStep(1);
+      setSelected(null);
+      setCustomText("");
+    }
+  }, [visible]);
+
+  // 🚀 키보드가 켜지고 꺼짐을 실시간으로 감지
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setIsKeyboardVisible(true)
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setIsKeyboardVisible(false)
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
   const handleClose = () => {
-    setStep(1);
-    setSelected(null);
-    setCustomText("");
     onClose();
+  };
+
+  // 🚀 배경 터치 시 스마트하게 분기 처리하는 함수 추가
+  const handleOverlayPress = () => {
+    if (isKeyboardVisible) {
+      Keyboard.dismiss(); // 키보드가 켜져 있으면 키보드만 내림
+    } else {
+      handleClose(); // 키보드가 없으면 모달 전체를 닫음
+    }
   };
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={handleClose}>
-        <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
-          {step === 1 ? (
-            <>
-              <Text style={styles.modalTitle}>떠나시는 이유를 알려주세요</Text>
-              <Text style={styles.modalDesc}>더 나은 서비스를 위해 활용할게요</Text>
-              <View style={styles.reasonList}>
-                {WITHDRAW_REASONS.map((reason, i) => (
-                  <View key={i}>
-                    <TouchableOpacity
-                      style={[
-                        styles.reasonItem,
-                        selected === i && styles.reasonItemActive,
-                      ]}
-                      onPress={() => {
-                        setSelected(i);
-                        if (i !== WITHDRAW_REASONS.length - 1) setCustomText("");
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.reasonText, selected === i && styles.reasonTextActive]}>{reason}</Text>
-                    </TouchableOpacity>
-                    {i === WITHDRAW_REASONS.length - 1 && isEtc && (
-                      <TextInput
-                        style={styles.customInput}
-                        value={customText}
-                        onChangeText={setCustomText}
-                        placeholder="직접 입력해주세요"
-                        placeholderTextColor={Colors.textHint}
-                        autoFocus
-                      />
-                    )}
-                  </View>
-                ))}
-              </View>
-              <View style={styles.modalBtnRow}>
-                <TouchableOpacity style={styles.modalCancelBtn} onPress={handleClose}>
-                  <Text style={styles.modalCancelBtnText}>취소</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalConfirmBtn, !canNext && { backgroundColor: Colors.border }]}
-                  onPress={() => canNext && setStep(2)}
-                  disabled={!canNext}
-                >
-                  <Text style={styles.modalConfirmBtnText}>다음</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <>
-              <Text style={styles.modalTitle}>정말 탈퇴하시겠어요?</Text>
-              <Text style={styles.modalDesc}>탈퇴 시 모든 데이터가 삭제되며{"\n"}복구할 수 없어요</Text>
-              <View style={styles.modalBtnRow}>
-                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setStep(1)}>
-                  <Text style={styles.modalCancelBtnText}>이전</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleClose}>
-                  <Text style={styles.modalConfirmBtnText}>탈퇴하기</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-        </View>
+      {/* 1. 전체 화면 딤(modalOverlay) — KeyboardAvoidingView 바깥에 두어 흰 배경 노출 방지 */}
+      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={handleOverlayPress}>
+        {/* 2. 흰 카드(modalCard)만 키보드에 맞춰 위로 밀기 */}
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={styles.modalCard} onStartShouldSetResponder={() => true}>
+            {step === 1 ? (
+              <>
+                <Text style={styles.modalTitle}>떠나시는 이유를 알려주세요</Text>
+                <Text style={styles.modalDesc}>더 나은 서비스를 위해 활용할게요</Text>
+                <View style={styles.reasonList}>
+                  {WITHDRAW_REASONS.map((reason, i) => (
+                    <View key={i}>
+                      <TouchableOpacity
+                        style={[
+                          styles.reasonItem,
+                          selected === i && styles.reasonItemActive,
+                        ]}
+                        onPress={() => {
+                          setSelected(i);
+                          if (i !== WITHDRAW_REASONS.length - 1) setCustomText("");
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.reasonText, selected === i && styles.reasonTextActive]}>{reason}</Text>
+                      </TouchableOpacity>
+                      {i === WITHDRAW_REASONS.length - 1 && isEtc && (
+                        <TextInput
+                          style={styles.customInput}
+                          value={customText}
+                          onChangeText={setCustomText}
+                          placeholder="직접 입력해주세요"
+                          placeholderTextColor={Colors.textHint}
+                          autoFocus
+                        />
+                      )}
+                    </View>
+                  ))}
+                </View>
+                <View style={styles.modalBtnRow}>
+                  <TouchableOpacity style={styles.modalCancelBtn} onPress={handleClose}>
+                    <Text style={styles.modalCancelBtnText}>취소</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalConfirmBtn, !canNext && { backgroundColor: Colors.border }]}
+                    onPress={() => canNext && setStep(2)}
+                    disabled={!canNext}
+                  >
+                    <Text style={styles.modalConfirmBtnText}>다음</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>정말 탈퇴하시겠어요?</Text>
+                <Text style={styles.modalDesc}>탈퇴 시 모든 데이터가 삭제되며{"\n"}복구할 수 없어요</Text>
+                <View style={styles.modalBtnRow}>
+                  <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setStep(1)}>
+                    <Text style={styles.modalCancelBtnText}>이전</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.modalConfirmBtn}
+                    onPress={() => {
+                      handleClose();
+                      onWithdraw();
+                    }}
+                  >
+                    <Text style={styles.modalConfirmBtnText}>탈퇴하기</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </KeyboardAvoidingView>
       </TouchableOpacity>
     </Modal>
   );
@@ -199,8 +253,64 @@ export default function SettingsScreen() {
     story_comment: true,
     poke: true,
   });
+  const [myMemberId, setMyMemberId] = useState<number | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      const checkPermissionAndLoad = async () => {
+        const { status } = await Notifications.getPermissionsAsync();
+        setNotifAllowed(status === "granted");
+
+        try {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const { data: myMember } = await supabase
+            .from("members")
+            .select("id")
+            .eq("auth_uid", user.id)
+            .single();
+
+          if (!myMember) return;
+          setMyMemberId(myMember.id);
+
+          const { data: settings } = await supabase
+            .from("member_settings")
+            .select("*")
+            .eq("member_id", myMember.id)
+            .single();
+
+          if (settings) {
+            setNotifs({
+              mood: settings.notif_mood ?? true,
+              story: settings.notif_story ?? true,
+              album: settings.notif_album ?? true,
+              comment: settings.notif_comment ?? true,
+              story_comment: settings.notif_story_comment ?? true,
+              poke: settings.notif_poke ?? true,
+            });
+          }
+        } catch (e) {
+          console.log("설정 로드 실패:", e);
+        }
+      };
+
+      checkPermissionAndLoad();
+    }, [])
+  );
+
+  const persistNotifToggle = useCallback(async (key: string, val: boolean) => {
+    setNotifs((prev) => ({ ...prev, [key]: val }));
+    if (!myMemberId) return;
+    await supabase
+      .from("member_settings")
+      .update({ [`notif_${key}`]: val })
+      .eq("member_id", myMemberId);
+  }, [myMemberId]);
 
   const handleLogout = async () => {
     setShowLogoutModal(false);
@@ -209,6 +319,58 @@ export default function SettingsScreen() {
       index: 0,
       routes: [{ name: "OnboardingStack" as never }],
     });
+  };
+
+  const handleWithdraw = async () => {
+    // 🚀 모달 페이드아웃 애니메이션(약 300ms)이 부드럽게 끝날 수 있도록 딜레이 후 탈퇴 로직 실행
+    setTimeout(async () => {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: myMember } = await supabase
+          .from("members")
+          .select("id, family_id")
+          .eq("auth_uid", user.id)
+          .single();
+
+        if (!myMember) return;
+
+        const profilePath = `${user.id}/profile.jpg`;
+        await supabase.storage.from("profiles").remove([profilePath]);
+
+        const { data: storyFiles } = await supabase.storage.from("stories").list(String(myMember.id));
+        if (storyFiles && storyFiles.length > 0) {
+          const storyPaths = storyFiles.map((f) => `${myMember.id}/${f.name}`);
+          await supabase.storage.from("stories").remove(storyPaths);
+        }
+
+        await supabase.from("member_settings").delete().eq("member_id", myMember.id);
+
+        const { data: deletedData, error: deleteError } = await supabase
+          .from("members")
+          .delete()
+          .eq("id", myMember.id)
+          .select();
+
+        if (deleteError) throw deleteError;
+
+        if (!deletedData || deletedData.length === 0) {
+          throw new Error("DB 삭제 권한이 차단되었습니다. (Supabase RLS DELETE 정책 필요)");
+        }
+
+        await supabase.auth.signOut();
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "OnboardingStack" as never }],
+        });
+      } catch (e) {
+        console.log("회원 탈퇴 실패:", e);
+        Alert.alert("오류", "탈퇴 처리 중 문제가 발생했어요. 다시 시도해주세요.");
+      }
+    }, 300);
   };
 
   return (
@@ -232,7 +394,7 @@ export default function SettingsScreen() {
                 key={key}
                 label={label}
                 rightElement={
-                  <CustomToggle value={notifs[key]} onValueChange={(val) => setNotifs(prev => ({ ...prev, [key]: val }))} />
+                  <CustomToggle value={notifs[key]} onValueChange={(val) => persistNotifToggle(key, val)} />
                 }
               />
             ))}
@@ -269,7 +431,11 @@ export default function SettingsScreen() {
         onClose={() => setShowLogoutModal(false)}
         onConfirm={handleLogout}
       />
-      <WithdrawModal visible={showWithdrawModal} onClose={() => setShowWithdrawModal(false)} />
+      <WithdrawModal
+        visible={showWithdrawModal}
+        onClose={() => setShowWithdrawModal(false)}
+        onWithdraw={handleWithdraw}
+      />
     </View>
   );
 }

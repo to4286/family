@@ -688,6 +688,9 @@ export default function OnboardingScreen() {
         const file = new File(compressedUri);
         const base64 = await file.base64();
 
+        // 🚀 1. 기존 사진 강제 삭제 시도 (RLS upsert 충돌을 방지하는 가장 확실한 방법)
+        await supabase.storage.from("profiles").remove([storagePath]);
+
         const { error: uploadError } = await supabase.storage
           .from("profiles")
           .upload(storagePath, decode(base64), {
@@ -699,7 +702,10 @@ export default function OnboardingScreen() {
           const { data: urlData } = supabase.storage
             .from("profiles")
             .getPublicUrl(storagePath);
-          profileImageUrl = urlData.publicUrl;
+          // 🚀 2. URL 끝에 타임스탬프를 붙여 폰이 옛날 캐시 사진을 보여주는 현상 원천 차단
+          profileImageUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+        } else {
+          console.log("프로필 업로드 에러:", uploadError);
         }
       }
 

@@ -11,6 +11,7 @@ import {
   Modal,
   Keyboard,
   Alert,
+  DeviceEventEmitter,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -106,15 +107,12 @@ export default function NicknameEditScreen() {
 
       if (error) throw error;
 
-      (navigation as { navigate: (n: string, p?: object) => void }).navigate("MainTab", {
-        screen: "MyPage",
-        params: {
-          toastIcon: "✅",
-          toastText: "닉네임이 변경되었어요",
-          updatedNickname: updatedNickname,
-        },
-        merge: true,
+      // 🚀 무전 신호 발송 후 현재 화면을 닫음 (스택 중첩 원천 차단)
+      DeviceEventEmitter.emit("SHOW_MYPAGE_TOAST", {
+        icon: "✅",
+        text: "닉네임이 변경되었어요",
       });
+      navigation.goBack();
     } catch (error) {
       console.log("닉네임 변경 실패:", error);
       Alert.alert("오류", "닉네임 변경에 실패했습니다. 다시 시도해주세요.");

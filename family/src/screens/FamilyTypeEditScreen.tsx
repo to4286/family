@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Modal,
   Alert,
+  DeviceEventEmitter,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -151,11 +152,12 @@ export default function FamilyTypeEditScreen() {
         throw new Error("DB 업데이트 권한이 차단되었습니다. (Supabase RLS 정책 필요)");
       }
 
-      (navigation as any).navigate("MainTab", {
-        screen: "MyPage",
-        params: { toastIcon: "✅", toastText: "가족 유형이 변경되었어요" },
-        merge: true,
+      // 🚀 무전 신호 발송 후 현재 화면을 닫음 (스택 중첩 원천 차단)
+      DeviceEventEmitter.emit("SHOW_MYPAGE_TOAST", {
+        icon: "✅",
+        text: "가족 유형이 변경되었어요",
       });
+      navigation.goBack();
     } catch (error) {
       console.log("가족 유형 변경 실패:", error);
       Alert.alert("오류", "가족 유형 변경에 실패했습니다. 다시 시도해주세요.");

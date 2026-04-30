@@ -9,6 +9,7 @@ import {
   Animated,
   Modal,
   Linking,
+  DeviceEventEmitter, // 🚀 앱 내부 신호 전달을 위한 무전기 추가
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
@@ -197,6 +198,36 @@ export default function MypageScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- params 초기화는 퇴장 애니 끝에서만
   }, [route.params?.toastText]);
 
+  // 🚀 1단계: 외부(편집 화면)에서 쏘는 무전 신호를 받는 수신기 설치
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener("SHOW_MYPAGE_TOAST", (data) => {
+      // 신호에 담긴 아이콘과 텍스트로 토스트 내용 설정
+      setToastContent({ icon: data.icon || "✅", text: data.text });
+      setShowToast(true);
+
+      // 토스트 등장 애니메이션 실행
+      Animated.timing(toastAnim, {
+        toValue: 0,
+        duration: TOAST_ANIM_MS,
+        useNativeDriver: true,
+      }).start();
+
+      // 일정 시간 표시 후 다시 숨기기
+      setTimeout(() => {
+        Animated.timing(toastAnim, {
+          toValue: TOAST_SLIDE_OFFSCREEN_PX,
+          duration: TOAST_ANIM_MS,
+          useNativeDriver: true,
+        }).start(() => {
+          setShowToast(false);
+        });
+      }, TOAST_DISPLAY_MS);
+    });
+
+    // 화면이 완전히 파괴될 때 수신기 제거 (메모리 관리)
+    return () => subscription.remove();
+  }, []);
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* --- 헤더: HomeScreen과 동일한 구조 및 스타일 --- */}
@@ -218,7 +249,7 @@ export default function MypageScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 120 + insets.bottom }]}
       >
         {/* --- 첫 번째 레이아웃: 내 정보 --- */}
         <View style={[styles.card, styles.sectionCard]}>

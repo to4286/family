@@ -8,6 +8,7 @@ import {
   Modal,
   Image,
   Alert,
+  DeviceEventEmitter,
 } from "react-native";
 import { File } from "expo-file-system/next";
 import { decode } from "base64-arraybuffer";
@@ -118,20 +119,27 @@ export default function ProfilePhotoEditScreen() {
 
         if (!base64) throw new Error("이미지 변환 실패");
 
-        // 캐시 문제 방지를 위해 파일명에 타임스탬프 추가
-        const storagePath = `${user.id}/profile_${Date.now()}.jpg`;
+        // 🚀 1. 파일명을 profile.jpg로 고정 (폴더는 유저 ID별로 구분)
+        const storagePath = `${user.id}/profile.jpg`;
 
+        // 🚀 2. 기존 사진을 먼저 삭제 (RLS 업서트 권한 문제를 방지하는 가장 확실한 방법)
+        // 에러가 나더라도(파일이 없는 경우 등) 무시하고 다음 단계 진행
+        await supabase.storage.from("profiles").remove([storagePath]);
+
+        // 🚀 3. 고정된 이름으로 새 사진 업로드
         const { error: uploadError } = await supabase.storage
           .from("profiles")
           .upload(storagePath, decode(base64), {
             contentType: "image/jpeg",
-            upsert: false,
+            upsert: true,
           });
 
         if (uploadError) throw uploadError;
 
         const { data: urlData } = supabase.storage.from("profiles").getPublicUrl(storagePath);
-        publicUrl = urlData.publicUrl;
+
+        // 🚀 4. DB 저장 시 URL 끝에 타임스탬프를 붙여 앱에서 즉시 새 사진으로 인식하게 함
+        publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
       }
 
       const { error: updateError } = await supabase
@@ -141,15 +149,12 @@ export default function ProfilePhotoEditScreen() {
 
       if (updateError) throw updateError;
 
-      (navigation as any).navigate("MainTab", {
-        screen: "MyPage",
-        params: {
-          toastIcon: "✅",
-          toastText: "프로필 사진이 변경되었어요",
-          profileImageUri: publicUrl,
-        },
-        merge: true,
+      // 🚀 무전 신호 발송 후 현재 화면을 닫음 (스택 중첩 원천 차단)
+      DeviceEventEmitter.emit("SHOW_MYPAGE_TOAST", {
+        icon: "✅",
+        text: "프로필 사진이 변경되었어요",
       });
+      navigation.goBack();
     } catch (error) {
       console.log("프로필 사진 변경 실패:", error);
       Alert.alert("오류", "프로필 사진 변경에 실패했습니다. 다시 시도해주세요.");
