@@ -111,35 +111,28 @@ export default function ProfilePhotoEditScreen() {
 
       let publicUrl = imageUri;
 
-      // 새로 선택한 로컬 이미지(file://)인 경우에만 업로드 실행
-      if (imageUri.startsWith("file://")) {
+      // 🚀 사진이 변경되었다면 무조건 업로드 실행 (isChanged 기준)
+      if (isChanged) {
         const compressedUri = await compressImage(imageUri);
         const file = new File(compressedUri);
         const base64 = await file.base64();
 
         if (!base64) throw new Error("이미지 변환 실패");
 
-        // 🚀 1. 파일명을 profile.jpg로 고정 (폴더는 유저 ID별로 구분)
-        const storagePath = `${user.id}/profile.jpg`;
+        // 🚀 고유한 파일명을 생성하여 RLS(권한) 충돌을 방지하고 캐시 문제를 해결함
+        const storagePath = `${user.id}/profile_${Date.now()}.jpg`;
 
-        // 🚀 2. 기존 사진을 먼저 삭제 (RLS 업서트 권한 문제를 방지하는 가장 확실한 방법)
-        // 에러가 나더라도(파일이 없는 경우 등) 무시하고 다음 단계 진행
-        await supabase.storage.from("profiles").remove([storagePath]);
-
-        // 🚀 3. 고정된 이름으로 새 사진 업로드
         const { error: uploadError } = await supabase.storage
           .from("profiles")
           .upload(storagePath, decode(base64), {
             contentType: "image/jpeg",
-            upsert: true,
+            upsert: false, // 고유한 이름이므로 덮어쓰기가 아닌 신규 생성으로 처리
           });
 
         if (uploadError) throw uploadError;
 
         const { data: urlData } = supabase.storage.from("profiles").getPublicUrl(storagePath);
-
-        // 🚀 4. DB 저장 시 URL 끝에 타임스탬프를 붙여 앱에서 즉시 새 사진으로 인식하게 함
-        publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+        publicUrl = urlData.publicUrl;
       }
 
       const { error: updateError } = await supabase
@@ -163,7 +156,7 @@ export default function ProfilePhotoEditScreen() {
   };
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={handleBackPress} activeOpacity={0.6}>
           <ChevronLeftIcon size={32} color={Colors.textSub} />
