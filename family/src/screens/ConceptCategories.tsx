@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
   StyleSheet,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { supabase } from "../utils/supabase";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
@@ -34,6 +35,8 @@ const CATEGORIES: Category[] = [
   { id: 4, level: 4, name: "생각", emoji: "💭", iconBg: "#F0D9C4", answeredCount: 1, totalCount: 10 },
   { id: 5, level: 5, name: "마음", emoji: "💛", iconBg: "#E8C9A0", answeredCount: 1, totalCount: 10 },
 ];
+
+const LIST_CONTENT_PADDING_BOTTOM = 40;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -62,6 +65,33 @@ export default function ConceptCategoriesScreen({ route }: Props) {
 
   const headerTitle = `${memberNickname}${getTopicParticle(memberNickname)} 어떤 사람일까요?`;
 
+  const [answerCounts, setAnswerCounts] = useState<Record<number, number>>({});
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchAnswerCounts = async () => {
+        try {
+          const { data, error } = await supabase.from("answers").select("category_id").eq("member_id", memberId);
+
+          if (error) throw error;
+
+          if (data) {
+            const counts = data.reduce<Record<number, number>>((acc, row) => {
+              const id = row.category_id as number;
+              acc[id] = (acc[id] || 0) + 1;
+              return acc;
+            }, {});
+            setAnswerCounts(counts);
+          }
+        } catch (error) {
+          console.log("답변 개수 불러오기 실패:", error);
+        }
+      };
+
+      fetchAnswerCounts();
+    }, [memberId])
+  );
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -74,7 +104,7 @@ export default function ConceptCategoriesScreen({ route }: Props) {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, { paddingBottom: LIST_CONTENT_PADDING_BOTTOM + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
         {CATEGORIES.map((cat) => (
@@ -105,7 +135,8 @@ export default function ConceptCategoriesScreen({ route }: Props) {
 
             <View style={styles.catRight}>
               <Text style={styles.catProgress}>
-                {cat.answeredCount}/{cat.totalCount}
+                {/* DB에서 가져온 카테고리별 답변 개수 (없으면 0) */}
+                {(answerCounts[cat.id] ?? 0)}/{cat.totalCount}
               </Text>
               <Text style={styles.catChevron}>›</Text>
             </View>
@@ -148,7 +179,6 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 20,
     gap: 18,
-    paddingBottom: 40,
   },
   catCard: {
     backgroundColor: Colors.white,
