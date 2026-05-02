@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useState, useRef } from "react";
 import {
   Animated,
   View,
@@ -13,32 +13,52 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack";
 import CheckCircleIcon from "../components/CheckCircleIcon";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
-import type { MainTabStackParamList } from "../navigation/types";
+import type { ConceptRelationship, MainTabStackParamList } from "../navigation/types";
+import type { Question } from "../types/database";
+import { supabase } from "../utils/supabase";
 
 type Props = NativeStackScreenProps<MainTabStackParamList, "ConceptQuestions">;
+
+/** Supabase `questions` 관계별 order 컬럼명 (단일 진실 원천) */
+const QUESTION_ORDER_COLUMN: Record<ConceptRelationship, keyof Pick<
+  Question,
+  "parent_order" | "child_order" | "spouse_order" | "sibling_order"
+>> = {
+  parent: "parent_order",
+  child: "child_order",
+  spouse: "spouse_order",
+  sibling: "sibling_order",
+};
+
+function getQuestionOrder(question: Question, relationship: ConceptRelationship): number | null {
+  switch (relationship) {
+    case "parent":
+      return question.parent_order;
+    case "child":
+      return question.child_order;
+    case "spouse":
+      return question.spouse_order;
+    case "sibling":
+      return question.sibling_order;
+  }
+}
 
 type QuestionStatus = "active" | "answered";
 
 type QuestionItem = {
   id: number;
+  answer_id?: number;
   question: string;
   status: QuestionStatus;
   answer?: string;
   memo?: string;
+  orderIndex?: number;
 };
-
-const MOCK_QUESTIONS: QuestionItem[] = [
-  { id: 1, question: "가장 좋아하는 계절은", status: "active" },
-];
-
-const NEXT_ACTIVE_QUESTION_TEMPLATE = {
-  question: "아침에 제일 먼저 하는 일은",
-} as const;
 
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -65,7 +85,7 @@ function QuestionCard({ item, onPress }: { item: QuestionItem; onPress: (item: Q
     <TouchableOpacity style={[styles.card, styles.shadow]} activeOpacity={0.88} onPress={() => onPress(item)}>
       <View style={styles.cardRow}>
         <View style={styles.numberBadge}>
-          <Text style={styles.numberText}>{item.id}</Text>
+          <Text style={styles.numberText}>{item.orderIndex}</Text>
         </View>
         <View style={styles.contentWrap}>
           <View style={styles.sentenceWrap}>
@@ -104,11 +124,12 @@ export default function ConceptQuestionsScreen({ route }: Props) {
   const paddingBottom = 24 + insets.bottom;
   const { width: windowWidth } = useWindowDimensions();
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
-  const { memberNickname, categoryName } = route.params;
+
+  const { memberId, memberNickname, categoryId, categoryName, relationship } = route.params;
 
   const headerTitle = `${memberNickname}의 ${categoryName}`;
 
-  const [questions, setQuestions] = useState<QuestionItem[]>(() => MOCK_QUESTIONS.map((q) => ({ ...q })));
+  const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<QuestionItem | null>(null);
   const [draftAnswer, setDraftAnswer] = useState("");
   const [draftMemo, setDraftMemo] = useState("");
@@ -133,12 +154,78 @@ export default function ConceptQuestionsScreen({ route }: Props) {
     [toastAnim]
   );
 
-  const visibleItems = useMemo(
-    () =>
-      [...questions]
-        .sort((a, b) => b.id - a.id)
-        .filter((q) => q.status === "active" || q.status === "answered"),
-    [questions],
+  const fetchData = useCallback(async () => {
+    try {
+      // 1. 카테고리에 해당하는 모든 질문 무조건 가져오기 (필터링은 JS에서 안전하게 처리)
+      const { data: qData, error: qError } = await supabase
+        .from("questions")
+        .select("*")
+        .eq("category_id", categoryId);
+
+      if (qError) throw qError;
+
+      // 2. 답변 가져오기 (category_id 조건 제거하여 테이블 구조 차이로 인한 튕김 방지)
+      let answers = [];
+      const { data: aData, error: aError } = await supabase
+        .from("answers")
+        .select("*")
+        .eq("member_id", memberId);
+
+      if (aError) {
+        console.log("답변 데이터 로딩 에러 (무시됨):", aError);
+      } else {
+        answers = aData ?? [];
+      }
+
+      // 3. 관계에 맞는 질문만 필터링 및 오름차순(1, 2, 3...) 정렬
+      const validQuestions = (qData ?? [])
+        .map((raw) => {
+          const q = raw as Question;
+          return { q, orderIdx: getQuestionOrder(q, relationship) };
+        })
+        .filter((item) => item.orderIdx != null)
+        .sort((a, b) => a.orderIdx! - b.orderIdx!);
+
+      const mapped: QuestionItem[] = [];
+      let foundActive = false;
+
+      for (const { q, orderIdx } of validQuestions) {
+        const ans = answers.find((a) => a.question_id === q.id);
+
+        if (ans) {
+          mapped.push({
+            id: q.id,
+            answer_id: ans.id,
+            question: q.question_text,
+            status: "answered",
+            answer: ans.answer_text,
+            memo: ans.memo_text ?? "",
+            orderIndex: orderIdx!,
+          });
+        } else if (!foundActive) {
+          // 답변이 없는 가장 번호가 작은 첫 번째 질문을 무조건 active로 노출
+          mapped.push({
+            id: q.id,
+            question: q.question_text,
+            status: "active",
+            orderIndex: orderIdx!,
+          });
+          foundActive = true;
+        }
+      }
+
+      // 4. 화면 렌더링을 위해 번호가 높은(최신) 질문이 위로 오도록 내림차순 정렬
+      mapped.sort((a, b) => (b.orderIndex ?? 0) - (a.orderIndex ?? 0));
+      setQuestions(mapped);
+    } catch (error) {
+      console.log("데이터 로딩 실패:", error);
+    }
+  }, [categoryId, memberId, relationship]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchData();
+    }, [fetchData])
   );
 
   const openModal = useCallback((item: QuestionItem) => {
@@ -178,35 +265,36 @@ export default function ConceptQuestionsScreen({ route }: Props) {
     handleCloseModal();
   }, [showExitConfirm, handleCloseModal]);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!selectedItem) return;
-    const wasActive = selectedItem.status === "active";
 
-    setQuestions((prev) => {
-      const updated = prev.map((q) =>
-        q.id === selectedItem.id
-          ? {
-              ...q,
-              answer: draftAnswer,
-              memo: draftMemo.trim() || undefined,
-              status: "answered" as const,
-            }
-          : q,
-      );
-
-      if (wasActive) {
-        updated.push({
-          id: Math.max(...updated.map((q) => q.id)) + 1,
-          question: NEXT_ACTIVE_QUESTION_TEMPLATE.question,
-          status: "active",
+    try {
+      if (selectedItem.status === "answered" && selectedItem.answer_id) {
+        const { error } = await supabase
+          .from("answers")
+          .update({ answer_text: draftAnswer, memo_text: draftMemo.trim() || null })
+          .eq("id", selectedItem.answer_id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("answers").insert({
+          member_id: memberId,
+          category_id: categoryId,
+          question_id: selectedItem.id,
+          answer_text: draftAnswer,
+          memo_text: draftMemo.trim() || null,
         });
+        if (error) throw error;
       }
-      return updated;
-    });
 
-    dismissModal();
-    triggerToast("✅", "정성스런 답변을 저장했어요");
-  }, [selectedItem, draftAnswer, draftMemo, dismissModal, triggerToast]);
+      dismissModal();
+      triggerToast("✅", "정성스런 답변을 저장했어요");
+
+      await fetchData();
+    } catch (error) {
+      console.log("저장 실패:", error);
+      triggerToast("❌", "저장에 실패했어요");
+    }
+  }, [selectedItem, draftAnswer, draftMemo, memberId, categoryId, dismissModal, triggerToast, fetchData]);
 
   const hasDraftChanges =
     selectedItem != null &&
@@ -230,17 +318,12 @@ export default function ConceptQuestionsScreen({ route }: Props) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {visibleItems.map((item) => (
+        {questions.map((item) => (
           <QuestionCard key={item.id} item={item} onPress={openModal} />
         ))}
       </ScrollView>
 
-      <Modal
-        visible={isModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={handleRequestClose}
-      >
+      <Modal visible={isModalVisible} transparent animationType="fade" onRequestClose={handleRequestClose}>
         <View style={styles.modalRootFill}>
           <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={handleRequestClose}>
             <View style={styles.modalKeyboardAvoid}>
@@ -308,7 +391,9 @@ export default function ConceptQuestionsScreen({ route }: Props) {
                 <View style={[StyleSheet.absoluteFillObject, styles.exitLayerDim]} />
               </TouchableWithoutFeedback>
               <View style={styles.exitLayerCenter} pointerEvents="box-none">
-                <View style={[styles.exitCard, styles.shadow, { width: modalCardWidth, paddingBottom: Math.max(insets.bottom, 22) }]}>
+                <View
+                  style={[styles.exitCard, styles.shadow, { width: modalCardWidth, paddingBottom: Math.max(insets.bottom, 22) }]}
+                >
                   <Text style={styles.exitTitle}>수정을 그만할까요?</Text>
                   <Text style={styles.exitSubtitle}>지금 나가면 수정한 내용이 사라져요.</Text>
                   <View style={styles.exitBtnRow}>
@@ -641,7 +726,7 @@ const styles = StyleSheet.create({
   },
   toastContainer: {
     position: "absolute",
-    bottom: 100, // 하단 탭바가 없는 화면이므로 살짝 아래로 조정
+    bottom: 100,
     left: 24,
     right: 24,
     flexDirection: "row",

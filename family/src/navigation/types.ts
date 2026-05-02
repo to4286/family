@@ -13,6 +13,13 @@ export type MainTabParamList = {
   } | undefined;
 };
 
+/** ConceptCategories / ConceptQuestions 이동 시 대상 멤버와의 관계 */
+export type ConceptRelationship =
+  | 'parent'
+  | 'child'
+  | 'spouse'
+  | 'sibling';
+
 /** 탭 위에 알림 등 오버레이 화면을 올릴 때 사용하는 스택 */
 export type MainTabStackParamList = {
   MainTab: undefined;
@@ -38,10 +45,15 @@ export type MainTabStackParamList = {
     /** AlbumPhotos에서만 전달. 삭제 후 목록 갱신·토스트용 (비직렬화 경고 무시 가능) */
     onDeleteSuccess?: () => void;
   };
-  ConceptCategories: { memberId: number; memberNickname: string };
+  ConceptCategories: {
+    memberId: number;
+    memberNickname: string;
+    relationship: ConceptRelationship;
+  };
   ConceptQuestions: {
     memberId: number;
     memberNickname: string;
+    relationship: ConceptRelationship;
     categoryId: number;
     categoryName: string;
     categoryEmoji: string;

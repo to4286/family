@@ -29,11 +29,10 @@ type Category = {
 };
 
 const CATEGORIES: Category[] = [
-  { id: 1, level: 1, name: "일상", emoji: "☀️", iconBg: "#FFF3E8", answeredCount: 1, totalCount: 10 },
-  { id: 2, level: 2, name: "취향", emoji: "🎵", iconBg: "#FEF0E6", answeredCount: 1, totalCount: 10 },
-  { id: 3, level: 3, name: "추억", emoji: "📷", iconBg: "#FAE8D5", answeredCount: 1, totalCount: 10 },
-  { id: 4, level: 4, name: "생각", emoji: "💭", iconBg: "#F0D9C4", answeredCount: 1, totalCount: 10 },
-  { id: 5, level: 5, name: "마음", emoji: "💛", iconBg: "#E8C9A0", answeredCount: 1, totalCount: 10 },
+  { id: 1, level: 1, name: "일상", emoji: "☀️", iconBg: "#FFF3E8", answeredCount: 0, totalCount: 10 },
+  { id: 2, level: 2, name: "취향", emoji: "🎵", iconBg: "#FEF0E6", answeredCount: 0, totalCount: 10 },
+  { id: 3, level: 3, name: "추억", emoji: "📷", iconBg: "#FAE8D5", answeredCount: 0, totalCount: 10 },
+  { id: 4, level: 4, name: "속마음", emoji: "💛", iconBg: "#E8C9A0", answeredCount: 0, totalCount: 10 },
 ];
 
 const LIST_CONTENT_PADDING_BOTTOM = 40;
@@ -61,7 +60,7 @@ function getTopicParticle(name: string): string {
 export default function ConceptCategoriesScreen({ route }: Props) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
-  const { memberId, memberNickname } = route.params;
+  const { memberId, memberNickname, relationship } = route.params;
 
   const headerTitle = `${memberNickname}${getTopicParticle(memberNickname)} 어떤 사람일까요?`;
 
@@ -116,6 +115,7 @@ export default function ConceptCategoriesScreen({ route }: Props) {
               navigation.navigate("ConceptQuestions", {
                 memberId,
                 memberNickname,
+                relationship,
                 categoryId: cat.id,
                 categoryName: cat.name,
                 categoryEmoji: cat.emoji,

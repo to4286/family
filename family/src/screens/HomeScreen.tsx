@@ -39,7 +39,7 @@ import CheckCircleIcon from "../components/CheckCircleIcon";
 import CommentSheet from "../components/CommentSheet";
 import type { Comment } from "../components/CommentSheet";
 import PhotoSelectionModal from "../components/PhotoSelectionModal";
-import type { MainTabParamList, MainTabStackParamList } from "../navigation/types";
+import type { ConceptRelationship, MainTabParamList, MainTabStackParamList } from "../navigation/types";
 
 const STORY_EXPIRES_DAYS = 1;
 
@@ -78,6 +78,29 @@ function formatRelativeCommentTime(iso: string): string {
   return d.toLocaleDateString("ko-KR");
 }
 
+const PARENT_ROLE_LABELS = new Set<string>(["엄마", "아빠"]);
+const CHILD_ROLE_LABEL = "자녀";
+
+function normalizeMemberRole(role: string): string {
+  return typeof role === "string" ? role.trim() : "";
+}
+
+/** 내 역할 문자열과 상대 역할을 비교해 Concept 질문 흐름용 관계 키로 변환 */
+function calculateRelationship(myRole: string, otherRole: string): ConceptRelationship {
+  const mine = normalizeMemberRole(myRole);
+  const theirs = normalizeMemberRole(otherRole);
+
+  if (PARENT_ROLE_LABELS.has(theirs)) {
+    return mine === CHILD_ROLE_LABEL ? "parent" : "spouse";
+  }
+
+  if (theirs === CHILD_ROLE_LABEL) {
+    return PARENT_ROLE_LABELS.has(mine) ? "child" : "sibling";
+  }
+
+  return "sibling";
+}
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 type HomeScreenNavigationProp = CompositeNavigationProp<
@@ -93,6 +116,7 @@ type Member = {
   currentMood: number | null;
   photos: { id: number; imageUri: string; uploadedAt: string; rawUploadedAt: string }[];
   hasUpdate: boolean;
+  roleType: string; // "엄마", "아빠", "자녀" 중 하나
 };
 
 type MemberPhoto = Member["photos"][number];
@@ -700,6 +724,7 @@ export default function HomeScreen() {
               currentMood: m.current_mood,
               photos: storiesByMember[m.id] || [],
               hasUpdate: false,
+              roleType: m.role_type ?? "",
             };
           }
 
@@ -716,6 +741,7 @@ export default function HomeScreen() {
               lastSeenMap[m.id],
               m.current_mood
             ),
+            roleType: m.role_type ?? "",
           };
         });
 
@@ -1241,10 +1267,16 @@ export default function HomeScreen() {
                     style={styles.learnMoreBtn}
                     activeOpacity={0.85}
                     onPress={() => {
-                      if (selectedMember) {
+                      if (selectedMember && myMemberRef.current) {
+                        const myMemberInfo = members.find((m) => m.isMine);
+                        if (!myMemberInfo) return;
+
+                        const relationship = calculateRelationship(myMemberInfo.roleType, selectedMember.roleType);
+
                         navigation.navigate("ConceptCategories", {
                           memberId: selectedMember.id,
                           memberNickname: selectedMember.nickname,
+                          relationship,
                         });
                       }
                     }}
