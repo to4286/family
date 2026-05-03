@@ -38,6 +38,7 @@ import {
   TOAST_STORY_UPLOADED,
 } from "../constants/toastUI";
 import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
+import { usePushNotifications } from "../hooks/usePushNotifications";
 import CheckCircleIcon from "../components/CheckCircleIcon";
 import CommentSheet from "../components/CommentSheet";
 import type { Comment } from "../components/CommentSheet";
@@ -607,6 +608,9 @@ function PhotoSwiper({
 // ─── HomeScreen ─────────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
+  // 앱 실행(홈 화면 진입) 시 자동으로 알림 권한을 묻고 푸시 토큰을 DB에 저장
+  usePushNotifications();
+
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const insets = useSafeAreaInsets();
   const mainScrollRef = useRef<ScrollView>(null);
@@ -650,7 +654,12 @@ export default function HomeScreen() {
   const myMemberRef = useRef<{ id: number; familyId: number } | null>(null);
 
   const route = useRoute<RouteProp<MainTabParamList, "Home">>();
+  const routeParamsRef = useRef(route.params);
   const isMountedRef = useRef(true);
+  useEffect(() => {
+    routeParamsRef.current = route.params;
+  }, [route.params]);
+
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -1020,7 +1029,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const params = route.params as
+      const params = routeParamsRef.current as
         | { selectedMemberId?: number; _ts?: number }
         | undefined;
 
@@ -1029,7 +1038,7 @@ export default function HomeScreen() {
 
       // GNB 탭, 뒤로가기 등 일반 진입 → 기본(내 프로필) 새로고침
       void loadFamilyData();
-    }, [loadFamilyData, route.params])
+    }, [loadFamilyData])
   );
 
   useEffect(() => {
