@@ -5,6 +5,9 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Modal,
+  PanResponder,
+  SafeAreaView,
   ScrollView,
   Share,
   StyleSheet,
@@ -135,12 +138,15 @@ const MOODS = [
 ];
 
 type TodayMemoryData = {
-  id: number;
+  photoId: number;
   imageUri: string;
   date: string;
+  folderId: number;
+  folderName: string;
+  folderCount: number;
+  folderMaxCount: number;
+  folderCoverColor: string;
 };
-
-const TODAY_MEMORY: TodayMemoryData | null = null;
 
 const PROFILE_SIZE = 64;
 const PROFILE_GAP = 12;
@@ -150,6 +156,7 @@ const PROFILE_SCROLL_INSET = 16;
 const MAIN_SCROLL_EXTRA_BOTTOM = 100;
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const { height: WINDOW_HEIGHT } = Dimensions.get("window");
 /** 24: familyCard marginHorizontal, 16: selectedPanel paddingHorizontal */
 const PHOTO_WIDTH = SCREEN_WIDTH - 24 * 2 - 16 * 2;
 
@@ -226,6 +233,31 @@ function findFirstUnreadIndex(photos: MemberPhoto[], lastSeenId: number | undefi
   return i;
 }
 
+function getLocalDateKey(date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function hashString(input: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function formatMemoryDateLabel(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}.${m}.${d}`;
+}
+
 // ─── Presentational pieces (재사용) ────────────────────────────────────────────
 
 function UploadTimeBadge({ time }: { time: string }) {
@@ -262,7 +294,22 @@ function TodayMemoryCard({ memory }: { memory: TodayMemoryData | null }) {
       <Text style={styles.todayTitle}>오늘의 추억</Text>
 
       {memory ? (
-        <TouchableOpacity style={styles.todayImageWrapper} activeOpacity={0.9} onPress={() => {}}>
+        <TouchableOpacity
+          style={styles.todayImageWrapper}
+          activeOpacity={0.9}
+          onPress={() =>
+            navigation.navigate("AlbumDetail", {
+              photoId: memory.photoId,
+              imageUri: memory.imageUri,
+              uploadedAt: memory.date,
+              folderId: memory.folderId,
+              folderName: memory.folderName,
+              folderCount: memory.folderCount,
+              folderMaxCount: memory.folderMaxCount,
+              folderCoverColor: memory.folderCoverColor,
+            })
+          }
+        >
           <Image source={{ uri: memory.imageUri }} style={styles.todayImage} resizeMode="cover" />
           <View style={styles.todayDateBadge} pointerEvents="none">
             <Text style={styles.todayDateText}>{memory.date}</Text>
@@ -420,6 +467,7 @@ type PhotoSwiperProps = {
   commentCounts: Record<number, number>;
   onPoke: () => void;
   onAddPhoto?: () => void;
+  onOpenFullscreen: (photo: MemberPhoto) => void;
 };
 
 function PhotoSwiper({
@@ -433,6 +481,7 @@ function PhotoSwiper({
   commentCounts,
   onPoke,
   onAddPhoto,
+  onOpenFullscreen,
 }: PhotoSwiperProps) {
   const flatListRef = useRef<FlatList<MemberPhoto>>(null);
 
@@ -511,11 +560,13 @@ function PhotoSwiper({
         }}
         renderItem={({ item }) => (
           <View style={[styles.photoFrame, { width: PHOTO_WIDTH }]}>
-            <Image
-              source={{ uri: item.imageUri }}
-              style={[styles.photoImage, { width: PHOTO_WIDTH }]}
-              resizeMode="cover"
-            />
+            <TouchableOpacity activeOpacity={0.95} onPress={() => onOpenFullscreen(item)}>
+              <Image
+                source={{ uri: item.imageUri }}
+                style={[styles.photoImage, { width: PHOTO_WIDTH }]}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
             <UploadTimeBadge time={item.uploadedAt} />
             <View style={[styles.photoActionsRow, !isMine && styles.photoActionsSingle]}>
               <View style={styles.commentBtnWrap}>
@@ -567,15 +618,19 @@ export default function HomeScreen() {
   const [inviteCode, setInviteCode] = useState("");
   const [comments, setComments] = useState<Record<number, Comment[]>>({});
   const [selectedMood, setSelectedMood] = useState<number | null>(null);
+  const [todayMemory, setTodayMemory] = useState<TodayMemoryData | null>(null);
 
   const [photoIndices, setPhotoIndices] = useState<Record<number, number>>({});
   const [lastSeenPhotoIds, setLastSeenPhotoIds] = useState<Record<number, number>>({});
 
   const [showComments, setShowComments] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [showStoryFullscreen, setShowStoryFullscreen] = useState(false);
+  const [fullscreenStoryUri, setFullscreenStoryUri] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastContent, setToastContent] = useState({ icon: "✅", text: "기분이 변경되었어요" });
   const toastAnim = useRef(new Animated.Value(TOAST_SLIDE_OFFSCREEN_PX)).current;
+  const storyPanY = useRef(new Animated.Value(0)).current;
 
   const triggerToast = useCallback((icon: string, text: string) => {
     setToastContent({ icon, text });
@@ -602,6 +657,53 @@ export default function HomeScreen() {
       isMountedRef.current = false;
     };
   }, []);
+
+  const closeStoryFullscreen = useCallback(() => {
+    setShowStoryFullscreen(false);
+    setFullscreenStoryUri(null);
+    storyPanY.setValue(0);
+  }, [storyPanY]);
+
+  const openStoryFullscreen = useCallback((photo: MemberPhoto) => {
+    storyPanY.setValue(0);
+    setFullscreenStoryUri(photo.imageUri);
+    setShowStoryFullscreen(true);
+  }, [storyPanY]);
+
+  const storyPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 10,
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          storyPanY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 150 || gestureState.vy > 1.5) {
+          Animated.timing(storyPanY, {
+            toValue: WINDOW_HEIGHT,
+            duration: 200,
+            useNativeDriver: true,
+          }).start(() => {
+            closeStoryFullscreen();
+          });
+        } else {
+          Animated.spring(storyPanY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  const storyBackdropOpacity = storyPanY.interpolate({
+    inputRange: [0, WINDOW_HEIGHT / 2],
+    outputRange: [1, 0],
+    extrapolate: "clamp",
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -637,6 +739,93 @@ export default function HomeScreen() {
       void checkUnread();
     }, [])
   );
+
+  const loadTodayMemory = useCallback(async (familyId: number) => {
+    try {
+      const { data: albums, error: albumErr } = await supabase
+        .from("albums")
+        .select("id, name, cover_color, max_count")
+        .eq("family_id", familyId);
+      if (albumErr) {
+        console.log("오늘의 추억용 앨범 조회 실패:", albumErr);
+        if (isMountedRef.current) setTodayMemory(null);
+        return;
+      }
+
+      const albumIds = (albums ?? []).map((a) => a.id);
+      if (albumIds.length === 0) {
+        if (isMountedRef.current) setTodayMemory(null);
+        return;
+      }
+
+      const albumById = new Map<
+        number,
+        { name: string; coverColor: string; maxCount: number }
+      >(
+        (albums ?? []).map((a) => [
+          a.id,
+          {
+            name: String(a.name ?? ""),
+            coverColor: String(a.cover_color ?? Colors.surface),
+            maxCount: Number(a.max_count ?? 20),
+          },
+        ])
+      );
+
+      const { data: photos, error: photoErr } = await supabase
+        .from("photos")
+        .select("id, album_id, image_url, created_at")
+        .in("album_id", albumIds);
+      if (photoErr) {
+        console.log("오늘의 추억 사진 조회 실패:", photoErr);
+        if (isMountedRef.current) setTodayMemory(null);
+        return;
+      }
+
+      const candidates = (photos ?? []).filter(
+        (p) =>
+          typeof p.image_url === "string" &&
+          p.image_url.length > 0 &&
+          typeof p.album_id === "number" &&
+          albumById.has(p.album_id)
+      );
+      if (candidates.length === 0) {
+        if (isMountedRef.current) setTodayMemory(null);
+        return;
+      }
+
+      const albumPhotoCounts = candidates.reduce<Record<number, number>>((acc, p) => {
+        acc[p.album_id] = (acc[p.album_id] ?? 0) + 1;
+        return acc;
+      }, {});
+
+      const sorted = [...candidates].sort((a, b) => a.id - b.id);
+      const dayKey = getLocalDateKey();
+      const pickedIndex = hashString(`${familyId}:${dayKey}`) % sorted.length;
+      const picked = sorted[pickedIndex]!;
+      const pickedAlbum = albumById.get(picked.album_id);
+      if (!pickedAlbum) {
+        if (isMountedRef.current) setTodayMemory(null);
+        return;
+      }
+
+      if (isMountedRef.current) {
+        setTodayMemory({
+          photoId: picked.id,
+          imageUri: picked.image_url,
+          date: formatMemoryDateLabel(String(picked.created_at ?? "")),
+          folderId: picked.album_id,
+          folderName: pickedAlbum.name,
+          folderCount: albumPhotoCounts[picked.album_id] ?? 0,
+          folderMaxCount: pickedAlbum.maxCount,
+          folderCoverColor: pickedAlbum.coverColor,
+        });
+      }
+    } catch (e) {
+      console.log("오늘의 추억 로딩 실패:", e);
+      if (isMountedRef.current) setTodayMemory(null);
+    }
+  }, []);
 
   const loadFamilyData = useCallback(
     async (options?: { preserveSelectedMemberId?: boolean }): Promise<Member[] | null> => {
@@ -680,6 +869,7 @@ export default function HomeScreen() {
           .eq("family_id", myMember.familyId);
 
         if (!familyMembers) return null;
+        void loadTodayMemory(myMember.familyId);
 
         const now = new Date().toISOString();
         const memberIds = familyMembers.map((m) => m.id);
@@ -758,7 +948,7 @@ export default function HomeScreen() {
         return null;
       }
     },
-    []
+    [loadTodayMemory]
   );
 
   const fetchCommentsForStory = useCallback(async (storyId: number) => {
@@ -1225,6 +1415,7 @@ export default function HomeScreen() {
                     commentCounts={commentCounts}
                     onPoke={() => {}}
                     onAddPhoto={handleOpenPhotoModal}
+                    onOpenFullscreen={openStoryFullscreen}
                   />
                 </>
               ) : (
@@ -1239,6 +1430,7 @@ export default function HomeScreen() {
                     nickname={selectedMember.nickname}
                     onCommentPress={handleOpenComments}
                     commentCounts={commentCounts}
+                    onOpenFullscreen={openStoryFullscreen}
                     onPoke={async () => {
                       try {
                         const { data: { user } } = await supabase.auth.getUser();
@@ -1289,7 +1481,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        <TodayMemoryCard memory={TODAY_MEMORY} />
+        <TodayMemoryCard memory={todayMemory} />
       </ScrollView>
 
       {(() => {
@@ -1313,6 +1505,35 @@ export default function HomeScreen() {
         onSelectAlbum={handleSelectAlbum}
         onTakePhoto={handleTakePhoto}
       />
+
+      <Modal
+        visible={showStoryFullscreen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeStoryFullscreen}
+      >
+        <Animated.View style={[styles.storyFullscreenRoot, { opacity: storyBackdropOpacity }]}>
+          <SafeAreaView style={styles.storyFullscreenSafeArea}>
+            <View style={styles.storyFullscreenHeader}>
+              <TouchableOpacity
+                style={styles.storyFullscreenCloseButton}
+                onPress={closeStoryFullscreen}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.storyFullscreenCloseButtonText}>×</Text>
+              </TouchableOpacity>
+            </View>
+            <Animated.View
+              {...storyPanResponder.panHandlers}
+              style={[styles.storyFullscreenImageWrap, { transform: [{ translateY: storyPanY }] }]}
+            >
+              {fullscreenStoryUri ? (
+                <Image source={{ uri: fullscreenStoryUri }} style={styles.storyFullscreenImage} resizeMode="contain" />
+              ) : null}
+            </Animated.View>
+          </SafeAreaView>
+        </Animated.View>
+      </Modal>
 
       {/* 토스트 메시지 (캡슐형 디자인) */}
       {showToast && (
@@ -1776,6 +1997,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Pretendard-Medium",
     color: Colors.white,
+  },
+  storyFullscreenRoot: {
+    flex: 1,
+    backgroundColor: "black",
+  },
+  storyFullscreenSafeArea: {
+    flex: 1,
+  },
+  storyFullscreenHeader: {
+    height: 50,
+    paddingHorizontal: 15,
+    justifyContent: "center",
+    alignItems: "flex-end",
+  },
+  storyFullscreenCloseButton: {
+    width: 30,
+    height: 30,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  storyFullscreenCloseButtonText: {
+    fontSize: 28,
+    lineHeight: 28,
+    color: Colors.white,
+  },
+  storyFullscreenImageWrap: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  storyFullscreenImage: {
+    width: "100%",
+    height: "100%",
   },
   toastContainer: {
     position: "absolute",

@@ -231,11 +231,11 @@ function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExist
   };
 
   return (
-    <View style={[styles.screen, { paddingTop: 32 }]}>
+    <View style={[styles.screen, { paddingTop: 32, backgroundColor: Colors.bg }]}>
       <View style={styles.loginHero}>
         <View style={styles.loginAccentBar} />
-        <Text style={styles.loginTitle}>{"가까운듯\n먼 사이"}</Text>
-        <Text style={styles.loginSubtitle}>가족과 더 가까워지는 따뜻한 공간</Text>
+        <Text style={styles.loginTitle}>라운집</Text>
+        <Text style={styles.loginSubtitle}>멈췄던 대화가 흐르는 공간</Text>
         <View style={styles.socialBtns}>
           <TouchableOpacity onPress={handleGoogleLogin} activeOpacity={0.8} style={styles.googleBtn}>
             <View style={styles.logoPlaceholder} />
@@ -247,7 +247,6 @@ function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExist
           </TouchableOpacity>
         </View>
       </View>
-      <Text style={styles.loginDisclaimer}>로그인 시 이용약관에 동의하게 됩니다</Text>
     </View>
   );
 }
@@ -787,7 +786,16 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View
+      style={[
+        styles.root,
+        {
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+          backgroundColor: step === 0 ? Colors.bg : Colors.white,
+        },
+      ]}
+    >
       {step > 1 && (
         <View style={styles.header}>
           <TouchableOpacity style={styles.backBtn} onPress={back} activeOpacity={0.6}>
