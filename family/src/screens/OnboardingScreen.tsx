@@ -21,11 +21,12 @@ import { useNavigation } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { makeRedirectUri } from "expo-auth-session";
 import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
-import { supabase } from "../utils/supabase";
+import { supabase, supabaseUrl } from "../utils/supabase";
 import { File } from "expo-file-system/next";
 import { decode } from "base64-arraybuffer";
 import { compressImage } from "../utils/imageCompress";
@@ -102,6 +103,38 @@ function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   );
 }
 
+function AppleLogoIcon({ size = 18, color = "#FFFFFF" }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M17.05 20.28c-.98.95-2.05.86-3.08.45-1.09-.42-2.09-.45-3.24 0-1.44.62-2.2.44-3.06-.45C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.79 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"
+        fill={color}
+      />
+    </Svg>
+  );
+}
+
+// Google 공식 가이드: 4색 G 로고 - 색상/형태 변경 금지
+function GoogleLogoIcon({ size = 18 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 48 48">
+      <Path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <Path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <Path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <Path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </Svg>
+  );
+}
+
+// Naver 공식 가이드: 흰색 N 로고 (녹색 배경 위) - 형태 변경 금지
+function NaverLogoIcon({ size = 18 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 16 16">
+      <Path fill="#FFFFFF" d="M9.43 6.51L4.87 0H0v16h4.86V9.49L9.43 16H14V0H9.43z" />
+    </Svg>
+  );
+}
+
 function StepIndicator({ total, current }: { total: number; current: number }) {
   return (
     <View style={styles.stepIndicator}>
@@ -169,6 +202,140 @@ function PhotoSelectionModal({ visible, onClose, onSelectAlbum, onTakePhoto }: a
 // --- 개별 화면 스크린 ---
 
 function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExistingMember: () => void }) {
+  const checkExistingMemberAndProceed = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: member } = await supabase
+        .from("members")
+        .select("id")
+        .eq("auth_uid", user.id)
+        .single();
+
+      if (member) {
+        onExistingMember();
+        return;
+      }
+    }
+    onNext();
+  };
+
+  const handleNaverLogin = async () => {
+    try {
+      const clientId = process.env.EXPO_PUBLIC_NAVER_CLIENT_ID;
+      if (!clientId) {
+        Alert.alert("로그인 실패", "네이버 Client ID가 설정되지 않았어요.");
+        return;
+      }
+
+      // 네이버 콘솔에 등록된 https URL (Edge Function이 실제로 호출됨)
+      const naverRedirectUri = `${supabaseUrl}/functions/v1/naver-login`;
+
+      // 앱이 받을 deep link (Edge Function이 처리 후 redirect)
+      const appRedirectUri = makeRedirectUri({
+        scheme: "com.lounzip.app",
+        path: "naver-callback",
+      });
+
+      const csrfToken = Math.random().toString(36).substring(2, 15);
+
+      // state에 csrfToken과 appRedirectUri 인코딩 (Edge Function이 디코딩해서 사용)
+      const stateObj = { csrfToken, appRedirectUri };
+      const state = btoa(JSON.stringify(stateObj))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+
+      const authUrl =
+        `https://nid.naver.com/oauth2.0/authorize?response_type=code` +
+        `&client_id=${encodeURIComponent(clientId)}` +
+        `&redirect_uri=${encodeURIComponent(naverRedirectUri)}` +
+        `&state=${encodeURIComponent(state)}`;
+
+      const browserResult = await WebBrowser.openAuthSessionAsync(
+        authUrl,
+        appRedirectUri
+      );
+
+      if (browserResult.type !== "success") {
+        if (
+          browserResult.type === "cancel" ||
+          browserResult.type === "dismiss"
+        ) {
+          return;
+        }
+        Alert.alert("로그인 실패", "인증이 완료되지 않았어요.");
+        return;
+      }
+
+      const { params, errorCode } = getAuthCallbackParams(browserResult.url);
+      if (errorCode) {
+        Alert.alert("로그인 실패", errorCode);
+        return;
+      }
+      if (params.error) {
+        Alert.alert("로그인 실패", params.error);
+        return;
+      }
+      if (params.csrf !== csrfToken) {
+        Alert.alert("로그인 실패", "보안 검증(state) 실패");
+        return;
+      }
+      const tokenHash = params.tokenHash;
+      if (!tokenHash) {
+        Alert.alert("로그인 실패", "토큰을 받지 못했어요.");
+        return;
+      }
+
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: "magiclink",
+      });
+
+      if (verifyError) {
+        Alert.alert("로그인 실패", verifyError.message);
+        return;
+      }
+
+      await checkExistingMemberAndProceed();
+    } catch (e: any) {
+      Alert.alert(
+        "로그인 실패",
+        e?.message ?? "알 수 없는 오류가 발생했어요."
+      );
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    if (Platform.OS !== "ios") {
+      Alert.alert("안내", "Apple 로그인은 iOS 기기에서만 사용할 수 있어요.");
+      return;
+    }
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      if (!credential.identityToken) {
+        Alert.alert("로그인 실패", "Apple 인증 토큰을 가져올 수 없습니다.");
+        return;
+      }
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: "apple",
+        token: credential.identityToken,
+      });
+      if (error) {
+        Alert.alert("로그인 실패", error.message);
+        return;
+      }
+      await checkExistingMemberAndProceed();
+    } catch (e: any) {
+      if (e?.code === "ERR_REQUEST_CANCELED") return;
+      Alert.alert("로그인 실패", e?.message ?? "알 수 없는 오류가 발생했어요.");
+    }
+  };
+
   const handleGoogleLogin = async () => {
     const redirectTo = makeRedirectUri();
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -238,13 +405,27 @@ function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExist
         <Text style={styles.loginTitle}>라운집</Text>
         <Text style={styles.loginSubtitle}>멈췄던 대화가 흐르는 공간</Text>
         <View style={styles.socialBtns}>
-          <TouchableOpacity onPress={handleGoogleLogin} activeOpacity={0.8} style={styles.googleBtn}>
-            <View style={styles.logoPlaceholder} />
-            <Text style={styles.googleBtnText}>구글로 로그인</Text>
+          {Platform.OS === "ios" ? (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={12}
+              style={styles.appleNativeBtn}
+              onPress={handleAppleLogin}
+            />
+          ) : (
+            <TouchableOpacity onPress={handleAppleLogin} activeOpacity={0.8} style={styles.appleBtn}>
+              <AppleLogoIcon size={18} color={Colors.white} />
+              <Text style={styles.appleBtnText}>Apple로 로그인</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity onPress={handleNaverLogin} activeOpacity={0.8} style={styles.naverBtn}>
+            <NaverLogoIcon size={18} />
+            <Text style={styles.naverBtnText}>네이버로 로그인</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={onNext} activeOpacity={0.8} style={styles.appleBtn}>
-            <View style={styles.appleLogoPlaceholder} />
-            <Text style={styles.appleBtnText}>Apple로 로그인</Text>
+          <TouchableOpacity onPress={handleGoogleLogin} activeOpacity={0.8} style={styles.googleBtn}>
+            <GoogleLogoIcon size={18} />
+            <Text style={styles.googleBtnText}>Google로 로그인</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -846,12 +1027,16 @@ const styles = StyleSheet.create({
   loginTitle: { fontSize: 28, fontFamily: "Pretendard-Medium", color: Colors.text, lineHeight: 40, marginBottom: 10 },
   loginSubtitle: { fontSize: 14, fontFamily: "Pretendard-Regular", color: Colors.textSub, lineHeight: 24, marginBottom: 48 },
   socialBtns: { gap: 12 },
-  googleBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15, borderRadius: 18, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
-  googleBtnText: { fontSize: 15, fontFamily: "Pretendard-Medium", color: Colors.text },
-  appleBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15, borderRadius: 18, backgroundColor: Colors.text },
-  appleBtnText: { fontSize: 15, fontFamily: "Pretendard-Medium", color: Colors.white },
-  logoPlaceholder: { width: 18, height: 18, borderRadius: 9, backgroundColor: Colors.surface },
-  appleLogoPlaceholder: { width: 18, height: 18, borderRadius: 9, backgroundColor: "rgba(255,255,255,0.2)" },
+  // 모든 소셜 로그인 버튼: borderRadius 12로 통일 (살짝 라운드)
+  naverBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15, borderRadius: 12, backgroundColor: "#03C75A" },
+  naverBtnText: { fontSize: 17, fontFamily: "Pretendard-Medium", color: Colors.white },
+  googleBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.white },
+  googleBtnText: { fontSize: 17, fontFamily: "Pretendard-Medium", color: Colors.text },
+  // Android fallback: Apple HIG 검정 배경 + 살짝 라운드
+  appleBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15, borderRadius: 12, backgroundColor: "#000000" },
+  appleBtnText: { fontSize: 17, fontFamily: "Pretendard-Medium", color: Colors.white },
+  // iOS native AppleAuthenticationButton: 다른 버튼과 같은 높이(51pt) 유지
+  appleNativeBtn: { width: "100%", height: 51 },
   loginDisclaimer: { fontSize: 12, fontFamily: "Pretendard-Regular", color: Colors.textHint, textAlign: "center" },
   allCheckRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, paddingHorizontal: 16, backgroundColor: Colors.surface, borderRadius: 16, marginBottom: 8 },
   allCheckLabel: { fontSize: 15, fontFamily: "Pretendard-Medium", color: Colors.text },

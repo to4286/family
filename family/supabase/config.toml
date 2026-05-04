@@ -417,3 +417,10 @@ entrypoint = "./functions/push-notification/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/push-notification/*.html" ]
+
+[functions.naver-login]
+enabled = true
+# 네이버가 직접 호출하는 callback이라 JWT 검증 비활성화
+verify_jwt = false
+import_map = "./functions/naver-login/deno.json"
+entrypoint = "./functions/naver-login/index.ts"
