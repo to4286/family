@@ -222,16 +222,28 @@ function sortMembersForDisplay(list: Member[], updatesMap: Record<number, boolea
 }
 
 /**
- * `photos`는 [가장 오래됨, …, 가장 최신] (스와이프로 오른쪽으로 갈수록 최신)
- * @param lastSeenId 마지막으로 본 사진 id. `undefined`면 기록 없음 → 맨 끝(최신)에서 시작
- * @returns 첫 미시청 슬롯 index. 전부 봤거나 볼 것 없으면 `photos.length - 1`
+ * `photos`는 [가장 오래됨, …, 가장 최신] 정렬.
+ * - 내 스토리: 최신부터
+ * - 타인 스토리: 마지막 확인 시각 이후의 첫 미시청부터
+ * - 시청 기록이 없으면 가장 오래된 스토리부터
  */
-function findFirstUnreadIndex(photos: MemberPhoto[], lastSeenId: number | undefined): number {
+function findFirstUnreadIndex(
+  photos: MemberPhoto[],
+  lastSeenIso: string | undefined,
+  isMine: boolean
+): number {
   if (photos.length === 0) return 0;
-  if (lastSeenId === undefined) return photos.length - 1;
-  const i = photos.findIndex((p) => p.id > lastSeenId);
-  if (i === -1) return photos.length - 1;
-  return i;
+  if (isMine) return photos.length - 1;
+  if (!lastSeenIso) return 0;
+
+  const lastSeenTime = new Date(lastSeenIso).getTime();
+  const firstUnreadIdx = photos.findIndex((p) => {
+    const t = new Date(p.rawUploadedAt).getTime();
+    return !isNaN(t) && t > lastSeenTime;
+  });
+
+  if (firstUnreadIdx === -1) return photos.length - 1;
+  return firstUnreadIdx;
 }
 
 function getLocalDateKey(date = new Date()): string {
@@ -625,7 +637,7 @@ export default function HomeScreen() {
   const [todayMemory, setTodayMemory] = useState<TodayMemoryData | null>(null);
 
   const [photoIndices, setPhotoIndices] = useState<Record<number, number>>({});
-  const [lastSeenPhotoIds, setLastSeenPhotoIds] = useState<Record<number, number>>({});
+  const [lastSeenMap, setLastSeenMap] = useState<Record<number, string>>({});
 
   const [showComments, setShowComments] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -945,6 +957,7 @@ export default function HomeScreen() {
         });
 
         if (isMountedRef.current) {
+          setLastSeenMap(lastSeenMap);
           setMembers(memberList);
           setUpdates(Object.fromEntries(memberList.map((m) => [m.id, m.isMine ? false : m.hasUpdate])));
           if (!options?.preserveSelectedMemberId) {
@@ -1143,9 +1156,7 @@ export default function HomeScreen() {
         if (list) {
           const me = list.find((m) => m.isMine);
           if (me && me.photos.length > 0) {
-            const last = me.photos[me.photos.length - 1];
             setPhotoIndices((prev) => ({ ...prev, [me.id]: me.photos.length - 1 }));
-            setLastSeenPhotoIds((prev) => ({ ...prev, [me.id]: last.id }));
           }
         }
         triggerToast(TOAST_STORY_UPLOADED.icon, TOAST_STORY_UPLOADED.text);
@@ -1174,27 +1185,35 @@ export default function HomeScreen() {
   const handlePhotoViewChange = useCallback(
     (idx: number) => {
       if (selectedMemberId == null) return;
-      const m = members.find((x) => x.id === selectedMemberId);
-      if (!m?.photos[idx]) return;
-      const pid = m.photos[idx].id;
       setPhotoIndices((prev) => ({ ...prev, [selectedMemberId]: idx }));
-      setLastSeenPhotoIds((prev) => ({ ...prev, [selectedMemberId]: pid }));
     },
-    [selectedMemberId, members]
+    [selectedMemberId]
   );
 
-  /** 구성원 탭 전환 시에만: 첫 미시청(또는 최신) 슬롯으로 이어보기 — lastSeen/stale 루프 방지를 위해 deps는 memberId만 */
+  /** 구성원 탭 전환 시에만: 첫 미시청(또는 최신) 슬롯으로 이어보기 */
   useLayoutEffect(() => {
     if (selectedMemberId == null) return;
     const m = members.find((x) => x.id === selectedMemberId);
     if (!m || m.photos.length === 0) return;
-    const lastSeen = lastSeenPhotoIds[selectedMemberId];
-    const nextIdx = findFirstUnreadIndex(m.photos, lastSeen);
-    const pid = m.photos[nextIdx].id;
+    const lastSeenIso = lastSeenMap[selectedMemberId];
+    const nextIdx = findFirstUnreadIndex(m.photos, lastSeenIso, m.isMine);
     setPhotoIndices((prev) => ({ ...prev, [selectedMemberId]: nextIdx }));
-    setLastSeenPhotoIds((prev) => ({ ...prev, [selectedMemberId]: pid }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 멤버 전환 시점의 시청 기록만 읽고, 스와이프로 갱신된 lastSeen에 반응하지 않음
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMemberId]);
+
+  useEffect(() => {
+    if (selectedMemberId == null) return;
+    const m = members.find((x) => x.id === selectedMemberId);
+    if (!m || m.isMine) return;
+
+    const timer = setTimeout(() => {
+      const seenAt = new Date().toISOString();
+      void saveLastSeenTimestamp(m.id);
+      setLastSeenMap((prev) => ({ ...prev, [m.id]: seenAt }));
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [selectedMemberId, members]);
 
   const selectedMember = useMemo(
     () => members.find((m) => m.id === selectedMemberId),
@@ -1351,9 +1370,6 @@ export default function HomeScreen() {
                   onPress={() => {
                     setSelectedMemberId(m.id);
                     setUpdates((prev) => ({ ...prev, [m.id]: false }));
-                    if (!m.isMine) {
-                      void saveLastSeenTimestamp(m.id);
-                    }
                   }}
                   activeOpacity={0.85}
                 >
