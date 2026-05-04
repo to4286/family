@@ -17,8 +17,38 @@ import * as Notifications from "expo-notifications";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import Svg, { Path } from "react-native-svg";
+import type { User } from "@supabase/supabase-js";
 import { Colors } from "../constants/colors";
 import { supabase } from "../utils/supabase";
+
+const CONNECTED_PROVIDER_LABELS: Record<string, string> = {
+  apple: "Apple",
+  google: "Google",
+  naver: "Naver",
+};
+
+/** 네이버는 매직링크(signIn)이라 identity가 email일 수 있음 → Edge에서 심은 user_metadata.provider 우선 */
+function getConnectedAccountLabel(user: User | null): string {
+  if (!user) return "";
+
+  const metaRaw = user.user_metadata?.provider;
+  if (typeof metaRaw === "string") {
+    const key = metaRaw.toLowerCase();
+    if (CONNECTED_PROVIDER_LABELS[key]) return CONNECTED_PROVIDER_LABELS[key];
+  }
+
+  const nonEmailIdentity = user.identities?.find((id) => {
+    const p = id.provider?.toLowerCase();
+    return p && p !== "email" && p !== "phone";
+  });
+  const fromIdentity = nonEmailIdentity?.provider?.toLowerCase();
+  const appProv =
+    typeof user.app_metadata?.provider === "string" ? user.app_metadata.provider.toLowerCase() : undefined;
+
+  const key = fromIdentity ?? appProv;
+  if (!key) return "";
+  return CONNECTED_PROVIDER_LABELS[key] ?? key.charAt(0).toUpperCase() + key.slice(1);
+}
 
 // --- 상수 및 데이터 ---
 const NOTIF_SETTINGS = [
@@ -254,6 +284,7 @@ export default function SettingsScreen() {
     poke: true,
   });
   const [myMemberId, setMyMemberId] = useState<number | null>(null);
+  const [linkedAccountLabel, setLinkedAccountLabel] = useState("");
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
 
@@ -268,6 +299,8 @@ export default function SettingsScreen() {
             data: { user },
           } = await supabase.auth.getUser();
           if (!user) return;
+
+          setLinkedAccountLabel(getConnectedAccountLabel(user));
 
           const { data: myMember } = await supabase
             .from("members")
@@ -361,6 +394,12 @@ export default function SettingsScreen() {
           throw new Error("DB 삭제 권한이 차단되었습니다. (Supabase RLS DELETE 정책 필요)");
         }
 
+        // 가족 구성원 전원 탈퇴 시 앨범 Storage 자동 정리
+        const cleanupFamilyAlbumFn = "cleanup-family-album";
+        await supabase.functions.invoke(cleanupFamilyAlbumFn, {
+          body: { family_id: myMember.family_id },
+        });
+
         await supabase.auth.signOut();
         navigation.reset({
           index: 0,
@@ -419,7 +458,7 @@ export default function SettingsScreen() {
         {/* 계정 관리 */}
         <SectionHeader title="계정 관리" />
         <View style={styles.accountSection}>
-          <RowItem label="연결된 계정" value="Google" />
+          <RowItem label="연결된 계정" value={linkedAccountLabel || "—"} />
           <RowItem label="로그아웃" onPress={() => setShowLogoutModal(true)} />
           <RowItem label="회원 탈퇴" danger onPress={() => setShowWithdrawModal(true)} />
         </View>

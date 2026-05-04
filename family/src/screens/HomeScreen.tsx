@@ -681,9 +681,7 @@ export default function HomeScreen() {
 
   const closeStoryFullscreen = useCallback(() => {
     setShowStoryFullscreen(false);
-    setFullscreenStoryUri(null);
-    storyPanY.setValue(0);
-  }, [storyPanY]);
+  }, []);
 
   const openStoryFullscreen = useCallback((photo: MemberPhoto) => {
     storyPanY.setValue(0);
@@ -1151,6 +1149,41 @@ export default function HomeScreen() {
           Alert.alert("저장 실패", insErr.message);
           return;
         }
+
+        // 같은 가족 구성원에게 스토리 등록 알림 저장
+        const storyNotifType = "story";
+        const storyNotifMessage = "새로운 스토리를 올렸어요.";
+        const { data: myMemberFull } = await supabase
+          .from("members")
+          .select("id, family_id, nickname")
+          .eq("id", memberId)
+          .single();
+
+        if (myMemberFull) {
+          const { data: familyMembers } = await supabase
+            .from("members")
+            .select("id")
+            .eq("family_id", myMemberFull.family_id)
+            .neq("id", memberId);
+
+          if (familyMembers && familyMembers.length > 0) {
+            const notifRows = familyMembers.map((fm) => ({
+              receiver_id: fm.id,
+              sender_id: memberId,
+              notif_type: storyNotifType,
+              message: storyNotifMessage,
+              is_read: false,
+              story_id: null,
+            }));
+
+            const { error: notifErr } = await supabase
+              .from("notifications")
+              .insert(notifRows);
+
+            if (notifErr) console.log("스토리 알림 저장 실패:", notifErr);
+          }
+        }
+
         setShowPhotoModal(false);
         const list = await loadFamilyData({ preserveSelectedMemberId: true });
         if (list) {
@@ -1206,13 +1239,9 @@ export default function HomeScreen() {
     const m = members.find((x) => x.id === selectedMemberId);
     if (!m || m.isMine) return;
 
-    const timer = setTimeout(() => {
-      const seenAt = new Date().toISOString();
-      void saveLastSeenTimestamp(m.id);
-      setLastSeenMap((prev) => ({ ...prev, [m.id]: seenAt }));
-    }, 800);
-
-    return () => clearTimeout(timer);
+    const seenAt = new Date().toISOString();
+    void saveLastSeenTimestamp(m.id);
+    setLastSeenMap((prev) => ({ ...prev, [m.id]: seenAt }));
   }, [selectedMemberId, members]);
 
   const selectedMember = useMemo(
