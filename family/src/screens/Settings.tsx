@@ -24,7 +24,7 @@ import { supabase } from "../utils/supabase";
 const CONNECTED_PROVIDER_LABELS: Record<string, string> = {
   apple: "Apple",
   google: "Google",
-  naver: "Naver",
+  naver: "NAVER",
 };
 
 /** 네이버는 매직링크(signIn)이라 identity가 email일 수 있음 → Edge에서 심은 user_metadata.provider 우선 */

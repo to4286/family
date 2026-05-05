@@ -337,64 +337,87 @@ function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExist
   };
 
   const handleGoogleLogin = async () => {
-    const redirectTo = makeRedirectUri();
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo, skipBrowserRedirect: true },
-    });
-    if (error) {
-      Alert.alert("로그인 실패", error.message);
-      return;
-    }
-    if (!data.url) {
-      Alert.alert("로그인 실패", "인증 주소를 가져올 수 없습니다.");
-      return;
-    }
-    const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-    if (res.type === "success") {
-      const { params, errorCode } = getAuthCallbackParams(res.url);
-      if (errorCode) {
-        Alert.alert("로그인 실패", errorCode);
-        return;
-      }
-      if (params.error) {
-        Alert.alert("로그인 실패", params.error_description || params.error);
-        return;
-      }
-      if (params.code) {
-        const { error: sessionError } = await supabase.auth.exchangeCodeForSession(params.code);
-        if (sessionError) {
-          Alert.alert("로그인 실패", sessionError.message);
-          return;
-        }
-      } else {
-        const access_token = params.access_token;
-        const refresh_token = params.refresh_token;
-        if (!access_token || !refresh_token) {
-          Alert.alert("로그인 실패", "세션 정보를 응답에서 찾을 수 없습니다.");
-          return;
-        }
-        const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
-        if (sessionError) {
-          Alert.alert("로그인 실패", sessionError.message);
-          return;
-        }
-      }
-      // 이미 가입된 회원인지 확인
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: member } = await supabase
-          .from("members")
-          .select("id")
-          .eq("auth_uid", user.id)
-          .single();
+    try {
+      const GOOGLE_REDIRECT_SCHEME = "familyapp";
+      const GOOGLE_REDIRECT_PATH = "google-callback";
+      const redirectTo = makeRedirectUri({
+        scheme: GOOGLE_REDIRECT_SCHEME,
+        path: GOOGLE_REDIRECT_PATH,
+      });
 
-        if (member) {
-          onExistingMember();
+      const alertLoginFail = (message: string) => {
+        Alert.alert("로그인 실패", message);
+      };
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error) {
+        alertLoginFail(error.message);
+        return;
+      }
+      if (!data.url) {
+        alertLoginFail("인증 주소를 가져올 수 없습니다.");
+        return;
+      }
+
+      const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
+        showInRecents: true,
+      });
+
+      if (res.type === "success") {
+        const { params, errorCode } = getAuthCallbackParams(res.url);
+        if (errorCode) {
+          alertLoginFail(errorCode);
           return;
         }
+        if (params.error) {
+          alertLoginFail(params.error_description || params.error);
+          return;
+        }
+        if (params.code) {
+          const { error: sessionError } = await supabase.auth.exchangeCodeForSession(params.code);
+          if (sessionError) {
+            alertLoginFail(sessionError.message);
+            return;
+          }
+        } else {
+          const access_token = params.access_token;
+          const refresh_token = params.refresh_token;
+          if (!access_token || !refresh_token) {
+            alertLoginFail("세션 정보를 응답에서 찾을 수 없습니다.");
+            return;
+          }
+          const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
+          if (sessionError) {
+            alertLoginFail(sessionError.message);
+            return;
+          }
+        }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: member } = await supabase
+            .from("members")
+            .select("id")
+            .eq("auth_uid", user.id)
+            .single();
+
+          if (member) {
+            onExistingMember();
+            return;
+          }
+        }
+        onNext();
+      } else if (res.type === "dismiss") {
+        console.log("구글 로그인 브라우저 닫힘");
       }
-      onNext();
+    } catch (e: any) {
+      Alert.alert("로그인 오류", e.message || String(e));
     }
   };
 

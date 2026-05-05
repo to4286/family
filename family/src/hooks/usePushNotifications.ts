@@ -1,17 +1,21 @@
 import { useState, useEffect } from 'react';
 import { Platform } from 'react-native';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { supabase } from '../utils/supabase';
 
-// 앱이 켜져 있을 때도 알림이 화면에 보이도록 설정
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+let Notifications: any = null;
+try {
+  Notifications = require('expo-notifications');
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch (e) {
+  console.log('expo-notifications 로드 불가 (Expo Go 환경)');
+}
 
 export function usePushNotifications() {
   const [expoPushToken, setExpoPushToken] = useState<string | undefined>();
@@ -27,6 +31,11 @@ export function usePushNotifications() {
   }, []);
 
   async function registerForPushNotificationsAsync() {
+    if (!Notifications) {
+      console.log('expo-notifications를 사용할 수 없습니다.');
+      return undefined;
+    }
+
     let token;
 
     // 안드로이드는 알림 채널 설정이 필수
