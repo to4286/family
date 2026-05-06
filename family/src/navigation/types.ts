@@ -69,6 +69,7 @@ export type MainTabStackParamList = {
   NicknameEdit: undefined;
   ProfilePhotoEdit: undefined;
   FamilyTypeEdit: undefined;
+  MemberManagement: undefined;
   NoticeDetail: undefined;
 };
 

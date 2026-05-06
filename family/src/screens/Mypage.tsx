@@ -302,6 +302,15 @@ export default function MypageScreen() {
               <Text style={styles.arrow}>{">"}</Text>
             </View>
           </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity
+            style={styles.listItem}
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate("MemberManagement")}
+          >
+            <Text style={styles.listLabel}>구성원 관리</Text>
+            <Text style={styles.arrow}>{">"}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* --- 세 번째 레이아웃: 기타 --- */}

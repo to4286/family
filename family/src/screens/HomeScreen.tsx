@@ -888,10 +888,22 @@ export default function HomeScreen() {
           .eq("family_id", myMember.familyId);
 
         if (!familyMembers) return null;
+
+        const { data: blockedRows } = await supabase
+          .from("blocked_users")
+          .select("blocked_id")
+          .eq("blocker_id", myMember.id);
+
+        const blockedSet = new Set((blockedRows ?? []).map((r: { blocked_id: number }) => r.blocked_id));
+
+        const filteredFamilyMembers = familyMembers.filter(
+          (m) => m.id === myMember.id || !blockedSet.has(m.id)
+        );
+
         void loadTodayMemory(myMember.familyId);
 
         const now = new Date().toISOString();
-        const memberIds = familyMembers.map((m) => m.id);
+        const memberIds = filteredFamilyMembers.map((m) => m.id);
         let stories: { id: number; member_id: number; image_url: string; uploaded_at: string }[] | null = null;
         if (memberIds.length > 0) {
           const { data, error: storiesErr } = await supabase
@@ -923,7 +935,7 @@ export default function HomeScreen() {
           });
         });
 
-        const memberList: Member[] = familyMembers.map((m) => {
+        const memberList: Member[] = filteredFamilyMembers.map((m) => {
           if (m.id === myMember.id) {
             return {
               id: m.id,
@@ -1002,14 +1014,28 @@ export default function HomeScreen() {
     }
 
     const list = (rows ?? []) as { id: number; writer_id: number; content: string; created_at: string }[];
-    if (list.length === 0) {
+
+    // 차단 목록 조회
+    const myId = myMemberRef.current?.id;
+    let blockedSet = new Set<number>();
+    if (myId) {
+      const { data: blockedRows } = await supabase
+        .from("blocked_users")
+        .select("blocked_id")
+        .eq("blocker_id", myId);
+      blockedSet = new Set((blockedRows ?? []).map((r: { blocked_id: number }) => r.blocked_id));
+    }
+
+    const filteredList = list.filter((r) => !blockedSet.has(Math.trunc(Number(r.writer_id))));
+
+    if (filteredList.length === 0) {
       if (isMountedRef.current) {
         setComments((prev) => ({ ...prev, [storyIdNum]: [] }));
       }
       return;
     }
 
-    const writerIds = [...new Set(list.map((r) => Math.trunc(Number(r.writer_id))))].filter((id) =>
+    const writerIds = [...new Set(filteredList.map((r) => Math.trunc(Number(r.writer_id))))].filter((id) =>
       Number.isFinite(id)
     );
     const { data: writers, error: wErr } = await supabase
@@ -1022,7 +1048,7 @@ export default function HomeScreen() {
     const wmap = new Map<number, WriterRow>(
       (writers ?? []).map((w) => [Math.trunc(Number(w.id)), w as WriterRow])
     );
-    const mapped: Comment[] = list.map((r) => {
+    const mapped: Comment[] = filteredList.map((r) => {
       const writerId = Math.trunc(Number(r.writer_id));
       const w = wmap.get(writerId);
       return {

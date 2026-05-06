@@ -20,6 +20,7 @@ import SettingsScreen from "../screens/Settings";
 import NicknameEditScreen from "../screens/NicknameEditScreen";
 import ProfilePhotoEditScreen from "../screens/ProfilePhotoEditScreen";
 import FamilyTypeEditScreen from "../screens/FamilyTypeEditScreen";
+import MemberManagementScreen from "../screens/MemberManagement";
 import NoticeDetailScreen from "../screens/NoticeDetail";
 
 import { Colors } from "../constants/colors";
@@ -210,6 +211,7 @@ function MainTabStackNavigator() {
       <MainTabStack.Screen name="NicknameEdit" component={NicknameEditScreen} options={{ headerShown: false }} />
       <MainTabStack.Screen name="ProfilePhotoEdit" component={ProfilePhotoEditScreen} options={{ headerShown: false }} />
       <MainTabStack.Screen name="FamilyTypeEdit" component={FamilyTypeEditScreen} options={{ headerShown: false }} />
+      <MainTabStack.Screen name="MemberManagement" component={MemberManagementScreen} options={{ headerShown: false }} />
       <MainTabStack.Screen name="NoticeDetail" component={NoticeDetailScreen} options={{ headerShown: false }} />
     </MainTabStack.Navigator>
   );

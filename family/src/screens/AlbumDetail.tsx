@@ -114,12 +114,31 @@ export default function AlbumDetailScreen({ route }: Props) {
       if (error) throw error;
 
       const list = rows ?? [];
-      if (list.length === 0) {
+
+      const { data: { user } } = await supabase.auth.getUser();
+      let blockedSet = new Set<number>();
+      if (user) {
+        const { data: me } = await supabase
+          .from("members")
+          .select("id")
+          .eq("auth_uid", user.id)
+          .single();
+        if (me) {
+          const { data: blockedRows } = await supabase
+            .from("blocked_users")
+            .select("blocked_id")
+            .eq("blocker_id", me.id);
+          blockedSet = new Set((blockedRows ?? []).map((r: { blocked_id: number }) => r.blocked_id));
+        }
+      }
+
+      const filteredList = list.filter((r: any) => !blockedSet.has(r.writer_id));
+      if (filteredList.length === 0) {
         setComments([]);
         return;
       }
 
-      const writerIds = [...new Set(list.map((r) => r.writer_id))];
+      const writerIds = [...new Set(filteredList.map((r) => r.writer_id))];
       const { data: writers } = await supabase
         .from("members")
         .select("id, nickname, profile_image_url")
@@ -127,7 +146,7 @@ export default function AlbumDetailScreen({ route }: Props) {
 
       const wmap = new Map((writers ?? []).map((w) => [w.id, w]));
 
-      const mapped: AlbumComment[] = list.map((r) => {
+      const mapped: AlbumComment[] = filteredList.map((r) => {
         const w = wmap.get(r.writer_id);
         const d = new Date(r.created_at);
 
