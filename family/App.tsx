@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View } from "react-native";
+import { View, Platform } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import * as Font from "expo-font";
@@ -7,6 +7,17 @@ import * as SplashScreen from "expo-splash-screen";
 import RootNavigator, { type RootStackEntryRoute } from "./src/navigation";
 import { Colors } from "./src/constants/colors";
 import { supabase } from "./src/utils/supabase";
+
+let KeyboardProvider: any;
+if (Platform.OS === "android") {
+  try {
+    KeyboardProvider = require("react-native-keyboard-controller").KeyboardProvider;
+  } catch (e) {
+    KeyboardProvider = ({ children }: any) => children;
+  }
+} else {
+  KeyboardProvider = ({ children }: any) => children;
+}
 
 /**
  * Supabase 세션 + members 가입 여부에 따라 루트 스택의 최초 화면을 결정한다.
@@ -82,9 +93,11 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <StatusBar style="dark" backgroundColor={Colors.bg} />
-      <RootNavigator initialRouteName={initialRoute} />
-    </NavigationContainer>
+    <KeyboardProvider>
+      <NavigationContainer>
+        <StatusBar style="dark" backgroundColor={Colors.bg} />
+        <RootNavigator initialRouteName={initialRoute} />
+      </NavigationContainer>
+    </KeyboardProvider>
   );
 }

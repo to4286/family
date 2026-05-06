@@ -113,6 +113,22 @@ export default function ProfilePhotoEditScreen() {
 
       // 🚀 사진이 변경되었다면 무조건 업로드 실행 (isChanged 기준)
       if (isChanged) {
+        const { data: currentMember } = await supabase
+          .from("members")
+          .select("profile_image_url")
+          .eq("id", memberId)
+          .single();
+
+        const existingUrl = currentMember?.profile_image_url;
+        if (existingUrl) {
+          const publicProfilesMarker = "/storage/v1/object/public/profiles/";
+          const markerIdx = existingUrl.indexOf(publicProfilesMarker);
+          if (markerIdx !== -1) {
+            const oldPath = existingUrl.substring(markerIdx + publicProfilesMarker.length);
+            await supabase.storage.from("profiles").remove([oldPath]);
+          }
+        }
+
         const compressedUri = await compressImage(imageUri);
         const file = new File(compressedUri);
         const base64 = await file.base64();

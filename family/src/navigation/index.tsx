@@ -48,7 +48,7 @@ function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
     <View
       style={{
         position: "absolute",
-        bottom: insets.bottom + 4,
+        bottom: insets.bottom + 8,
         left: 0,
         right: 0,
         alignItems: "center",

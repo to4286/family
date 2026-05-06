@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Dimensions,
   Animated,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
@@ -660,7 +661,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    bottom: 120,
+    bottom: Platform.OS === "android" ? 150 : 128,
     right: 24,
     backgroundColor: Colors.accent,
     borderRadius: 24,

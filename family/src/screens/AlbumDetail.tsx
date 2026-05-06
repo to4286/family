@@ -28,10 +28,22 @@ import { Colors } from "../constants/colors";
 import type { MainTabStackParamList } from "../navigation/types";
 import { supabase } from "../utils/supabase";
 
+let KAView: any;
+if (Platform.OS === "android") {
+  try {
+    KAView = require("react-native-keyboard-controller").KeyboardAvoidingView;
+  } catch (e) {
+    KAView = require("react-native").KeyboardAvoidingView;
+  }
+} else {
+  KAView = require("react-native").KeyboardAvoidingView;
+}
+
 type Props = NativeStackScreenProps<MainTabStackParamList, "AlbumDetail">;
 
 type AlbumComment = {
   id: number;
+  writerId: number;
   memberPhotoUri?: string;
   memberNickname: string;
   text: string;
@@ -39,9 +51,14 @@ type AlbumComment = {
 };
 
 type MyMemberProfile = {
+  id: number;
   nickname: string | null;
   profile_image_url: string | null;
 };
+
+const PHOTO_REPORT_REASONS = ["부적절한 댓글", "불쾌한 콘텐츠", "기타 (직접 입력)"] as const;
+
+const PHOTO_REPORT_REASONS_LIST = ["부적절한 사진", "불쾌한 콘텐츠", "기타 (직접 입력)"];
 
 const BOTTOM_SHEET_SLIDE_OFFSET = 300;
 const BOTTOM_SHEET_OPEN_MS = 250;
@@ -76,8 +93,31 @@ export default function AlbumDetailScreen({ route }: Props) {
   const [toastContent, setToastContent] = useState({ icon: "", text: "" });
   const toastAnim = useRef(new Animated.Value(300)).current;
   const slideAnim = useRef(new Animated.Value(BOTTOM_SHEET_SLIDE_OFFSET)).current;
+  const commentActionSlideAnim = useRef(new Animated.Value(BOTTOM_SHEET_SLIDE_OFFSET)).current;
 
   const [myProfile, setMyProfile] = useState<MyMemberProfile | null>(null);
+  const [uploaderId, setUploaderId] = useState<number | null>(null);
+
+  const [selectedComment, setSelectedComment] = useState<AlbumComment | null>(null);
+  const [showCommentActionSheet, setShowCommentActionSheet] = useState(false);
+  const [showCommentReportModal, setShowCommentReportModal] = useState(false);
+  const [reportSelected, setReportSelected] = useState<number | null>(null);
+  const [reportCustomText, setReportCustomText] = useState("");
+  const [reportKeyboardVisible, setReportKeyboardVisible] = useState(false);
+
+  const [showPhotoReportModal, setShowPhotoReportModal] = useState(false);
+  const [photoReportSelected, setPhotoReportSelected] = useState<number | null>(null);
+  const [photoReportCustomText, setPhotoReportCustomText] = useState("");
+  const [photoReportKeyboardVisible, setPhotoReportKeyboardVisible] = useState(false);
+
+  const showCommentReportModalRef = useRef(false);
+  const showPhotoReportModalRef = useRef(false);
+  useEffect(() => {
+    showCommentReportModalRef.current = showCommentReportModal;
+  }, [showCommentReportModal]);
+  useEffect(() => {
+    showPhotoReportModalRef.current = showPhotoReportModal;
+  }, [showPhotoReportModal]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +129,7 @@ export default function AlbumDetailScreen({ route }: Props) {
         if (!user || cancelled) return;
         const { data } = await supabase
           .from("members")
-          .select("nickname, profile_image_url")
+          .select("id, nickname, profile_image_url")
           .eq("auth_uid", user.id)
           .maybeSingle();
         if (!cancelled && data) setMyProfile(data);
@@ -101,6 +141,17 @@ export default function AlbumDetailScreen({ route }: Props) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase
+        .from("photos")
+        .select("uploader_id")
+        .eq("id", Number(photoId))
+        .single();
+      if (data) setUploaderId(data.uploader_id);
+    })();
+  }, [photoId]);
 
   const fetchComments = useCallback(async () => {
     try {
@@ -168,6 +219,7 @@ export default function AlbumDetailScreen({ route }: Props) {
 
         return {
           id: r.id,
+          writerId: r.writer_id,
           memberNickname: w?.nickname || "가족",
           memberPhotoUri: w?.profile_image_url || undefined,
           text: r.content,
@@ -213,6 +265,116 @@ export default function AlbumDetailScreen({ route }: Props) {
     [slideAnim]
   );
 
+  const closeCommentActionSheet = useCallback(
+    (after?: () => void) => {
+      Animated.timing(commentActionSlideAnim, {
+        toValue: BOTTOM_SHEET_SLIDE_OFFSET,
+        duration: BOTTOM_SHEET_CLOSE_MS,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowCommentActionSheet(false);
+        after?.();
+      });
+    },
+    [commentActionSlideAnim]
+  );
+
+  const closeCommentReportModal = useCallback(() => {
+    setShowCommentReportModal(false);
+    setSelectedComment(null);
+  }, []);
+
+  const handleCommentReportOverlayPress = useCallback(() => {
+    if (reportKeyboardVisible) {
+      Keyboard.dismiss();
+    } else {
+      closeCommentReportModal();
+    }
+  }, [reportKeyboardVisible, closeCommentReportModal]);
+
+  const isPhotoReportEtc = reportSelected === PHOTO_REPORT_REASONS.length - 1;
+  const canSubmitPhotoReport =
+    reportSelected !== null && (!isPhotoReportEtc || reportCustomText.trim().length > 0);
+
+  const handleSubmitPhotoCommentReport = useCallback(async () => {
+    if (!canSubmitPhotoReport || !selectedComment || !myProfile) return;
+    const reason = isPhotoReportEtc ? reportCustomText.trim() : PHOTO_REPORT_REASONS[reportSelected]!;
+    const { error } = await supabase.from("reports").insert({
+      reporter_id: myProfile.id,
+      target_type: "photo_comment",
+      target_id: selectedComment.id,
+      reason,
+    });
+    if (error) {
+      console.log("댓글 신고 실패:", error);
+      return;
+    }
+    closeCommentReportModal();
+    triggerToast("✅", "신고가 접수되었습니다.");
+  }, [
+    canSubmitPhotoReport,
+    selectedComment,
+    myProfile,
+    isPhotoReportEtc,
+    reportSelected,
+    reportCustomText,
+    triggerToast,
+    closeCommentReportModal,
+  ]);
+
+  const handleAlbumCommentDelete = useCallback(async () => {
+    const c = selectedComment;
+    if (!c) return;
+    await supabase.from("comments").delete().eq("id", c.id);
+    closeCommentActionSheet(() => setSelectedComment(null));
+    void fetchComments();
+    triggerToast("✅", "댓글이 삭제되었습니다.");
+  }, [selectedComment, closeCommentActionSheet, fetchComments, triggerToast]);
+
+  const closePhotoReportModal = useCallback(() => {
+    setShowPhotoReportModal(false);
+  }, []);
+
+  const handlePhotoReportOverlayPress = useCallback(() => {
+    if (photoReportKeyboardVisible) {
+      Keyboard.dismiss();
+    } else {
+      closePhotoReportModal();
+    }
+  }, [photoReportKeyboardVisible, closePhotoReportModal]);
+
+  const isAlbumPhotoReportEtc = photoReportSelected === PHOTO_REPORT_REASONS_LIST.length - 1;
+  const canSubmitAlbumPhotoReport =
+    photoReportSelected !== null && (!isAlbumPhotoReportEtc || photoReportCustomText.trim().length > 0);
+
+  const handleSubmitAlbumPhotoReport = useCallback(async () => {
+    if (!canSubmitAlbumPhotoReport || !myProfile) return;
+    const reason = isAlbumPhotoReportEtc
+      ? photoReportCustomText.trim()
+      : PHOTO_REPORT_REASONS_LIST[photoReportSelected]!;
+    const { error } = await supabase.from("reports").insert({
+      reporter_id: myProfile.id,
+      target_type: "photo",
+      target_id: Number(photoId),
+      reason,
+    });
+    if (error) {
+      console.log("사진 신고 실패:", error);
+      return;
+    }
+    closePhotoReportModal();
+    triggerToast("✅", "신고가 접수되었습니다.");
+  }, [
+    canSubmitAlbumPhotoReport,
+    myProfile,
+    isAlbumPhotoReportEtc,
+    photoReportSelected,
+    photoReportCustomText,
+    photoId,
+    triggerToast,
+    closePhotoReportModal,
+  ]);
+
   useEffect(() => {
     if (showMenu) {
       slideAnim.setValue(BOTTOM_SHEET_SLIDE_OFFSET);
@@ -225,10 +387,69 @@ export default function AlbumDetailScreen({ route }: Props) {
   }, [showMenu, slideAnim]);
 
   useEffect(() => {
+    if (showCommentActionSheet) {
+      commentActionSlideAnim.setValue(BOTTOM_SHEET_SLIDE_OFFSET);
+      Animated.timing(commentActionSlideAnim, {
+        toValue: 0,
+        duration: BOTTOM_SHEET_OPEN_MS,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [showCommentActionSheet, commentActionSlideAnim]);
+
+  useEffect(() => {
+    if (!showCommentReportModal) return;
+    setReportSelected(null);
+    setReportCustomText("");
+  }, [showCommentReportModal]);
+
+  useEffect(() => {
+    if (!showCommentReportModal) return;
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setReportKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setReportKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [showCommentReportModal]);
+
+  useEffect(() => {
+    if (!showPhotoReportModal) return;
+    setPhotoReportSelected(null);
+    setPhotoReportCustomText("");
+  }, [showPhotoReportModal]);
+
+  useEffect(() => {
+    if (!showPhotoReportModal) return;
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setPhotoReportKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setPhotoReportKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [showPhotoReportModal]);
+
+  useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    const showSub = Keyboard.addListener(showEvent, () => {
+      if (!showCommentReportModalRef.current && !showPhotoReportModalRef.current) setKeyboardVisible(true);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      if (!showCommentReportModalRef.current && !showPhotoReportModalRef.current) setKeyboardVisible(false);
+    });
     return () => {
       showSub.remove();
       hideSub.remove();
@@ -359,10 +580,11 @@ export default function AlbumDetailScreen({ route }: Props) {
 
   return (
     <View style={styles.outerRoot}>
-      <KeyboardAvoidingView
+      <KAView
         style={[styles.root, { paddingTop: insets.top }]}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         keyboardVerticalOffset={0}
+        enabled={!showCommentReportModal && !showCommentActionSheet}
       >
         <View style={styles.header}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.6}>
@@ -404,9 +626,23 @@ export default function AlbumDetailScreen({ route }: Props) {
                     </View>
                   )}
                   <View style={{ flex: 1 }}>
-                    <View style={styles.commentMeta}>
-                      <Text style={styles.commentNickname}>{c.memberNickname}</Text>
-                      <Text style={styles.commentTime}>{c.createdAt}</Text>
+                    <View style={styles.commentMetaRow}>
+                      <View style={styles.commentMetaLeft}>
+                        <Text style={styles.commentNickname}>{c.memberNickname}</Text>
+                        <Text style={styles.commentTime}>{c.createdAt}</Text>
+                      </View>
+                      {myProfile != null ? (
+                        <TouchableOpacity
+                          onPress={() => {
+                            setSelectedComment(c);
+                            setShowCommentActionSheet(true);
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="ellipsis-horizontal" size={18} color={Colors.textHint} />
+                        </TouchableOpacity>
+                      ) : null}
                     </View>
                     <Text style={styles.commentText}>{c.text}</Text>
                   </View>
@@ -416,37 +652,40 @@ export default function AlbumDetailScreen({ route }: Props) {
           </View>
         </ScrollView>
 
-        <View style={[styles.inputContainer, { paddingBottom: keyboardVisible ? 8 : insets.bottom + 12 }]}>
-          {myProfile?.profile_image_url ? (
-            <Image source={{ uri: myProfile.profile_image_url }} style={styles.myAvatar} />
-          ) : (
-            <View
-              style={[
-                styles.myAvatar,
-                { backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center" },
-              ]}
-            >
-              <Ionicons name="person" size={18} color={Colors.textHint} />
+        <View
+          pointerEvents={showCommentReportModal || showPhotoReportModal ? "none" : "auto"}
+          style={[styles.inputContainer, { paddingBottom: keyboardVisible ? 8 : insets.bottom + 12 }]}
+        >
+            {myProfile?.profile_image_url ? (
+              <Image source={{ uri: myProfile.profile_image_url }} style={styles.myAvatar} />
+            ) : (
+              <View
+                style={[
+                  styles.myAvatar,
+                  { backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center" },
+                ]}
+              >
+                <Ionicons name="person" size={18} color={Colors.textHint} />
+              </View>
+            )}
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={styles.input}
+                value={text}
+                onChangeText={setText}
+                placeholder="댓글을 입력하세요..."
+                placeholderTextColor={Colors.textHint}
+                maxLength={200}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="center"
+              />
+              <TouchableOpacity style={styles.sendBtn} onPress={handleCommentSubmit} disabled={!text.trim()} activeOpacity={0.7}>
+                <Text style={styles.sendBtnText}>➤</Text>
+              </TouchableOpacity>
             </View>
-          )}
-          <View style={styles.inputWrap}>
-            <TextInput
-              style={styles.input}
-              value={text}
-              onChangeText={setText}
-              placeholder="댓글을 입력하세요..."
-              placeholderTextColor={Colors.textHint}
-              maxLength={200}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="center"
-            />
-            <TouchableOpacity style={styles.sendBtn} onPress={handleCommentSubmit} disabled={!text.trim()} activeOpacity={0.7}>
-              <Text style={styles.sendBtnText}>➤</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      </KeyboardAvoidingView>
+      </KAView>
 
       <Modal visible={showMenu} transparent animationType="fade" onRequestClose={() => closeBottomSheet()}>
         <TouchableOpacity style={styles.bottomSheetOverlay} activeOpacity={1} onPress={() => closeBottomSheet()}>
@@ -465,9 +704,22 @@ export default function AlbumDetailScreen({ route }: Props) {
               <Text style={styles.bottomSheetItemText}>저장하기</Text>
             </TouchableOpacity>
             <View style={styles.bottomSheetDivider} />
-            <TouchableOpacity style={styles.bottomSheetItem} onPress={handleOpenDeleteFromMenu} activeOpacity={0.7}>
-              <Text style={[styles.bottomSheetItemText, styles.bottomSheetItemTextDestructive]}>삭제하기</Text>
-            </TouchableOpacity>
+            {uploaderId != null && myProfile?.id != null && uploaderId === myProfile.id ? (
+              <TouchableOpacity style={styles.bottomSheetItem} onPress={handleOpenDeleteFromMenu} activeOpacity={0.7}>
+                <Text style={[styles.bottomSheetItemText, styles.bottomSheetItemTextDestructive]}>삭제하기</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.bottomSheetItem}
+                onPress={() => {
+                  closeBottomSheet();
+                  setTimeout(() => setShowPhotoReportModal(true), 300);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.bottomSheetItemText, styles.bottomSheetItemTextDestructive]}>신고하기</Text>
+              </TouchableOpacity>
+            )}
           </Animated.View>
         </TouchableOpacity>
       </Modal>
@@ -511,6 +763,158 @@ export default function AlbumDetailScreen({ route }: Props) {
             </Animated.View>
           </SafeAreaView>
         </Animated.View>
+      </Modal>
+
+      <Modal
+        visible={showCommentActionSheet}
+        transparent
+        animationType="fade"
+        onRequestClose={() => closeCommentActionSheet(() => setSelectedComment(null))}
+      >
+        <TouchableOpacity
+          style={styles.bottomSheetOverlay}
+          activeOpacity={1}
+          onPress={() => closeCommentActionSheet(() => setSelectedComment(null))}
+        >
+          <Animated.View
+            style={[
+              styles.bottomSheet,
+              {
+                paddingBottom: insets.bottom + 12,
+                transform: [{ translateY: commentActionSlideAnim }],
+              },
+            ]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={styles.bottomSheetHandle} />
+            {selectedComment != null && myProfile != null && selectedComment.writerId === myProfile.id ? (
+              <TouchableOpacity style={styles.bottomSheetItem} onPress={() => void handleAlbumCommentDelete()} activeOpacity={0.7}>
+                <Text style={[styles.bottomSheetItemText, styles.bottomSheetItemTextDestructive]}>삭제하기</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.bottomSheetItem}
+                onPress={() => {
+                  closeCommentActionSheet(() => setShowCommentReportModal(true));
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.bottomSheetItemText, styles.bottomSheetItemTextDestructive]}>신고하기</Text>
+              </TouchableOpacity>
+            )}
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={showCommentReportModal} transparent animationType="fade" onRequestClose={handleCommentReportOverlayPress}>
+        <TouchableOpacity style={styles.reportModalOverlay} activeOpacity={1} onPress={handleCommentReportOverlayPress}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            <View style={styles.reportReasonCard} onStartShouldSetResponder={() => true}>
+              <Text style={styles.reportModalTitle}>신고 사유를 선택해주세요</Text>
+              <Text style={styles.reportModalDesc}>허위 신고 시 서비스 이용이 제한될 수 있어요</Text>
+              <View style={styles.reasonList}>
+                {PHOTO_REPORT_REASONS.map((reason, i) => (
+                  <View key={reason}>
+                    <TouchableOpacity
+                      style={[styles.reasonItem, reportSelected === i && styles.reasonItemActive]}
+                      onPress={() => {
+                        setReportSelected(i);
+                        if (i !== PHOTO_REPORT_REASONS.length - 1) setReportCustomText("");
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.reasonText, reportSelected === i && styles.reasonTextActive]}>{reason}</Text>
+                    </TouchableOpacity>
+                    {i === PHOTO_REPORT_REASONS.length - 1 && isPhotoReportEtc ? (
+                      <TextInput
+                        style={styles.customInput}
+                        value={reportCustomText}
+                        onChangeText={setReportCustomText}
+                        placeholder="직접 입력해주세요"
+                        placeholderTextColor={Colors.textHint}
+                        autoFocus
+                      />
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+              <View style={styles.reportModalBtnRow}>
+                <TouchableOpacity
+                  style={styles.reportModalCancelBtn}
+                  onPress={() => {
+                    closeCommentReportModal();
+                  }}
+                >
+                  <Text style={styles.reportModalCancelBtnText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.reportModalConfirmBtn,
+                    !canSubmitPhotoReport && { backgroundColor: Colors.border },
+                  ]}
+                  onPress={() => void handleSubmitPhotoCommentReport()}
+                  disabled={!canSubmitPhotoReport}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.reportModalConfirmBtnText}>신고하기</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={showPhotoReportModal} transparent animationType="fade" onRequestClose={handlePhotoReportOverlayPress}>
+        <TouchableOpacity style={styles.reportModalOverlay} activeOpacity={1} onPress={handlePhotoReportOverlayPress}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            <View style={styles.reportReasonCard} onStartShouldSetResponder={() => true}>
+              <Text style={styles.reportModalTitle}>신고 사유를 선택해주세요</Text>
+              <Text style={styles.reportModalDesc}>허위 신고 시 서비스 이용이 제한될 수 있어요</Text>
+              <View style={styles.reasonList}>
+                {PHOTO_REPORT_REASONS_LIST.map((reason, i) => (
+                  <View key={`${reason}-${i}`}>
+                    <TouchableOpacity
+                      style={[styles.reasonItem, photoReportSelected === i && styles.reasonItemActive]}
+                      onPress={() => {
+                        setPhotoReportSelected(i);
+                        if (i !== PHOTO_REPORT_REASONS_LIST.length - 1) setPhotoReportCustomText("");
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.reasonText, photoReportSelected === i && styles.reasonTextActive]}>{reason}</Text>
+                    </TouchableOpacity>
+                    {i === PHOTO_REPORT_REASONS_LIST.length - 1 && isAlbumPhotoReportEtc ? (
+                      <TextInput
+                        style={styles.customInput}
+                        value={photoReportCustomText}
+                        onChangeText={setPhotoReportCustomText}
+                        placeholder="직접 입력해주세요"
+                        placeholderTextColor={Colors.textHint}
+                        autoFocus
+                      />
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+              <View style={styles.reportModalBtnRow}>
+                <TouchableOpacity style={styles.reportModalCancelBtn} onPress={closePhotoReportModal} activeOpacity={0.85}>
+                  <Text style={styles.reportModalCancelBtnText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.reportModalConfirmBtn,
+                    !canSubmitAlbumPhotoReport && { backgroundColor: Colors.border },
+                  ]}
+                  onPress={() => void handleSubmitAlbumPhotoReport()}
+                  disabled={!canSubmitAlbumPhotoReport}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.reportModalConfirmBtnText}>신고하기</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </TouchableOpacity>
       </Modal>
 
       {showToast && (
@@ -563,7 +967,8 @@ const styles = StyleSheet.create({
   commentEmpty: { fontSize: 14, fontFamily: "Pretendard-Regular", color: Colors.textHint, textAlign: "center", paddingVertical: 20 },
   commentRow: { flexDirection: "row", gap: 10, marginBottom: 16, alignItems: "flex-start" },
   commentAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.surface },
-  commentMeta: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
+  commentMetaRow: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
+  commentMetaLeft: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
   commentNickname: { fontSize: 14, fontFamily: "Pretendard-Medium", color: Colors.text },
   commentTime: { fontSize: 12, fontFamily: "Pretendard-Regular", color: Colors.textHint },
   commentText: { fontSize: 15, fontFamily: "Pretendard-Regular", color: Colors.text, lineHeight: 22 },
@@ -639,6 +1044,100 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.border,
     marginHorizontal: 24,
   },
+  reportModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(46,34,22,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reportReasonCard: {
+    width: 320,
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    padding: 24,
+  },
+  reportModalTitle: {
+    fontSize: 17,
+    fontFamily: "Pretendard-Medium",
+    color: Colors.text,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  reportModalDesc: {
+    fontSize: 14,
+    fontFamily: "Pretendard-Regular",
+    color: Colors.textSub,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  reasonList: {
+    marginBottom: 20,
+    gap: 8,
+  },
+  reasonItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.white,
+  },
+  reasonItemActive: {
+    borderColor: "#D4645A",
+    backgroundColor: "#FFF0EE",
+  },
+  reasonText: {
+    fontSize: 14,
+    fontFamily: "Pretendard-Regular",
+    color: Colors.text,
+  },
+  reasonTextActive: {
+    fontFamily: "Pretendard-Medium",
+    color: "#D4645A",
+  },
+  customInput: {
+    marginTop: 8,
+    width: "100%",
+    padding: 12,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#D4645A",
+    backgroundColor: Colors.bg,
+    fontSize: 14,
+    fontFamily: "Pretendard-Regular",
+    color: Colors.text,
+  },
+  reportModalBtnRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  reportModalCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: "center",
+  },
+  reportModalCancelBtnText: {
+    fontSize: 14,
+    fontFamily: "Pretendard-Regular",
+    color: Colors.text,
+  },
+  reportModalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: Colors.accent,
+    alignItems: "center",
+  },
+  reportModalConfirmBtnText: {
+    fontSize: 14,
+    fontFamily: "Pretendard-Medium",
+    color: Colors.white,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(46,34,22,0.5)",
@@ -710,6 +1209,7 @@ const styles = StyleSheet.create({
   modalCloseButton: {
     width: 30,
     height: 30,
+    marginTop: Platform.OS === "android" ? 50 : 0,
     justifyContent: "center",
     alignItems: "center",
   },

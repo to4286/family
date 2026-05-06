@@ -5,13 +5,17 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
   PanResponder,
+  Platform,
   SafeAreaView,
   ScrollView,
   Share,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   type NativeScrollEvent,
@@ -46,6 +50,8 @@ import PhotoSelectionModal from "../components/PhotoSelectionModal";
 import type { ConceptRelationship, MainTabParamList, MainTabStackParamList } from "../navigation/types";
 
 const STORY_EXPIRES_DAYS = 1;
+
+const STORY_PHOTO_REPORT_REASONS = ["부적절한 사진", "불쾌한 콘텐츠", "기타 (직접 입력)"];
 
 /** 댓글 API 실패 시 Supabase 엔드포인트·PostgrestError 전체를 남김 */
 function logCommentsApiFailure(
@@ -643,6 +649,11 @@ export default function HomeScreen() {
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [showStoryFullscreen, setShowStoryFullscreen] = useState(false);
   const [fullscreenStoryUri, setFullscreenStoryUri] = useState<string | null>(null);
+  const [showStoryReportModal, setShowStoryReportModal] = useState(false);
+  const [storyReportSelected, setStoryReportSelected] = useState<number | null>(null);
+  const [storyReportCustomText, setStoryReportCustomText] = useState("");
+  const [storyReportKeyboardVisible, setStoryReportKeyboardVisible] = useState(false);
+
   const [showToast, setShowToast] = useState(false);
   const [toastContent, setToastContent] = useState({ icon: "✅", text: "기분이 변경되었어요" });
   const toastAnim = useRef(new Animated.Value(TOAST_SLIDE_OFFSCREEN_PX)).current;
@@ -918,6 +929,47 @@ export default function HomeScreen() {
           stories = data;
         }
 
+        // 각 스토리의 댓글 개수를 미리 조회
+        if (stories && stories.length > 0) {
+          const storyIds = stories.map((s) => s.id);
+          const { data: commentRows } = await supabase
+            .from("comments")
+            .select("id, target_id, writer_id, content, created_at")
+            .eq("target_type", "STORY")
+            .in("target_id", storyIds);
+
+          if (commentRows && isMountedRef.current) {
+            // 차단된 유저의 댓글 제외
+            const filteredCommentRows = commentRows.filter(
+              (r: any) => !blockedSet.has(r.writer_id)
+            );
+
+            // 스토리별로 댓글 개수만 카운트해서 comments state에 반영
+            const countsByStory: Record<number, number> = {};
+            filteredCommentRows.forEach((r: any) => {
+              countsByStory[r.target_id] = (countsByStory[r.target_id] || 0) + 1;
+            });
+
+            setComments((prev) => {
+              const next = { ...prev };
+              storyIds.forEach((sid) => {
+                // 이미 상세 댓글 데이터가 있으면 건드리지 않음
+                if (!next[sid]) {
+                  // 개수만 파악하기 위해 빈 배열 대신 길이만큼의 placeholder 배열 생성
+                  next[sid] = Array.from({ length: countsByStory[sid] || 0 }, (_, i) => ({
+                    id: -(sid * 1000 + i),
+                    writerId: 0,
+                    memberNickname: "",
+                    text: "",
+                    createdAt: "",
+                  }));
+                }
+              });
+              return next;
+            });
+          }
+        }
+
         const storiesByMember: Record<
           number,
           { id: number; imageUri: string; uploadedAt: string; rawUploadedAt: string }[]
@@ -1053,6 +1105,7 @@ export default function HomeScreen() {
       const w = wmap.get(writerId);
       return {
         id: r.id,
+        writerId,
         memberPhotoUri: w?.profile_image_url ?? undefined,
         memberNickname: w?.nickname ?? "가족",
         text: r.content,
@@ -1277,6 +1330,72 @@ export default function HomeScreen() {
 
   const currentPhotoIndex =
     selectedMemberId != null ? (photoIndices[selectedMemberId] ?? 0) : 0;
+
+  useEffect(() => {
+    if (showStoryReportModal) {
+      setStoryReportSelected(null);
+      setStoryReportCustomText("");
+    }
+  }, [showStoryReportModal]);
+
+  useEffect(() => {
+    if (!showStoryReportModal) return;
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      () => setStoryReportKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => setStoryReportKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [showStoryReportModal]);
+
+  const isStoryReportEtc = storyReportSelected === STORY_PHOTO_REPORT_REASONS.length - 1;
+  const canSubmitStoryReport =
+    storyReportSelected !== null && (!isStoryReportEtc || storyReportCustomText.trim().length > 0);
+
+  const handleStoryReportOverlayPress = useCallback(() => {
+    if (storyReportKeyboardVisible) {
+      Keyboard.dismiss();
+    } else {
+      setShowStoryReportModal(false);
+    }
+  }, [storyReportKeyboardVisible]);
+
+  const handleSubmitStoryReport = useCallback(async () => {
+    const reporterId = myMemberRef.current?.id;
+    const currentStory = selectedMember?.photos[currentPhotoIndex];
+    if (!canSubmitStoryReport || reporterId == null || !currentStory?.id) return;
+    const reason = isStoryReportEtc
+      ? storyReportCustomText.trim()
+      : STORY_PHOTO_REPORT_REASONS[storyReportSelected]!;
+    const { error } = await supabase.from("reports").insert({
+      reporter_id: reporterId,
+      target_type: "story",
+      target_id: currentStory.id,
+      reason,
+    });
+    if (error) {
+      console.log("스토리 신고 실패:", error);
+      return;
+    }
+    setShowStoryReportModal(false);
+    closeStoryFullscreen();
+    triggerToast("✅", "신고가 접수되었습니다.");
+  }, [
+    canSubmitStoryReport,
+    selectedMember,
+    currentPhotoIndex,
+    isStoryReportEtc,
+    storyReportSelected,
+    storyReportCustomText,
+    closeStoryFullscreen,
+    triggerToast,
+  ]);
 
   useEffect(() => {
     const refresh = route.params?.refresh;
@@ -1575,6 +1694,13 @@ export default function HomeScreen() {
             onSubmit={handleCommentSubmit}
             photoUri={currentPhoto?.imageUri}
             myPhotoUri={me?.photoUri}
+            myMemberId={myMemberRef.current?.id}
+            onDeleteComment={async (commentId: number) => {
+              await supabase.from("comments").delete().eq("id", commentId);
+              if (commentPhotoId !== null) {
+                await fetchCommentsForStory(commentPhotoId);
+              }
+            }}
           />
         );
       })()}
@@ -1595,13 +1721,38 @@ export default function HomeScreen() {
         <Animated.View style={[styles.storyFullscreenRoot, { opacity: storyBackdropOpacity }]}>
           <SafeAreaView style={styles.storyFullscreenSafeArea}>
             <View style={styles.storyFullscreenHeader}>
-              <TouchableOpacity
-                style={styles.storyFullscreenCloseButton}
-                onPress={closeStoryFullscreen}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.storyFullscreenCloseButtonText}>×</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                {selectedMember && !selectedMember.isMine && (
+                  <TouchableOpacity
+                    onPress={() => setShowStoryReportModal(true)}
+                    activeOpacity={0.85}
+                    style={styles.storyFullscreenCloseButton}
+                  >
+                    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                      <Path
+                        d="M18 17.5H6V10.5C6 7.1865 8.6865 4.5 12 4.5C15.3135 4.5 18 7.1865 18 10.5V17.5Z"
+                        stroke="white"
+                        strokeWidth={2}
+                        strokeLinejoin="round"
+                      />
+                      <Path
+                        d="M4 21H20M2 6.5L3.5 7M6.5 2L7 3.5M5 5L3.5 3.5"
+                        stroke="white"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </Svg>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={styles.storyFullscreenCloseButton}
+                  onPress={closeStoryFullscreen}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.storyFullscreenCloseButtonText}>×</Text>
+                </TouchableOpacity>
+              </View>
             </View>
             <Animated.View
               {...storyPanResponder.panHandlers}
@@ -1612,6 +1763,86 @@ export default function HomeScreen() {
               ) : null}
             </Animated.View>
           </SafeAreaView>
+          {showStoryReportModal && (
+            <TouchableOpacity
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(0,0,0,0.5)",
+                justifyContent: "center",
+                alignItems: "center",
+                paddingHorizontal: 24,
+              }}
+              activeOpacity={1}
+              onPress={handleStoryReportOverlayPress}
+            >
+              <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+                <View style={styles.storyReportModalCard} onStartShouldSetResponder={() => true}>
+                  <Text style={styles.storyReportModalTitle}>신고 사유를 선택해주세요</Text>
+                  <Text style={styles.storyReportModalDesc}>허위 신고 시 서비스 이용이 제한될 수 있어요</Text>
+                  <View style={styles.storyReportReasonList}>
+                    {STORY_PHOTO_REPORT_REASONS.map((reason, i) => (
+                      <View key={`${reason}-${i}`}>
+                        <TouchableOpacity
+                          style={[
+                            styles.storyReportReasonItem,
+                            storyReportSelected === i && styles.storyReportReasonItemActive,
+                          ]}
+                          onPress={() => {
+                            setStoryReportSelected(i);
+                            if (i !== STORY_PHOTO_REPORT_REASONS.length - 1) setStoryReportCustomText("");
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.storyReportReasonText,
+                              storyReportSelected === i && styles.storyReportReasonTextActive,
+                            ]}
+                          >
+                            {reason}
+                          </Text>
+                        </TouchableOpacity>
+                        {i === STORY_PHOTO_REPORT_REASONS.length - 1 && isStoryReportEtc ? (
+                          <TextInput
+                            style={styles.storyReportCustomInput}
+                            value={storyReportCustomText}
+                            onChangeText={setStoryReportCustomText}
+                            placeholder="직접 입력해주세요"
+                            placeholderTextColor={Colors.textHint}
+                            autoFocus
+                          />
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.storyReportBtnRow}>
+                    <TouchableOpacity
+                      style={styles.storyReportCancelBtn}
+                      onPress={() => setShowStoryReportModal(false)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.storyReportCancelBtnText}>취소</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.storyReportSubmitBtn,
+                        !canSubmitStoryReport && { backgroundColor: Colors.border },
+                      ]}
+                      onPress={() => void handleSubmitStoryReport()}
+                      disabled={!canSubmitStoryReport}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.storyReportSubmitBtnText}>신고하기</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </KeyboardAvoidingView>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </Modal>
 
@@ -2094,6 +2325,7 @@ const styles = StyleSheet.create({
   storyFullscreenCloseButton: {
     width: 30,
     height: 30,
+    marginTop: Platform.OS === "android" ? 50 : 0,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -2110,6 +2342,91 @@ const styles = StyleSheet.create({
   storyFullscreenImage: {
     width: "100%",
     height: "100%",
+  },
+  storyReportModalCard: {
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: Colors.white,
+    borderRadius: 24,
+    padding: 24,
+  },
+  storyReportModalTitle: {
+    fontSize: 16,
+    fontFamily: "Pretendard-Medium",
+    color: Colors.text,
+    textAlign: "center",
+  },
+  storyReportModalDesc: {
+    fontSize: 13,
+    fontFamily: "Pretendard-Regular",
+    color: Colors.textSub,
+    textAlign: "center",
+    marginTop: 6,
+  },
+  storyReportReasonList: {
+    marginTop: 16,
+  },
+  storyReportReasonItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginBottom: 8,
+    backgroundColor: Colors.surface,
+  },
+  storyReportReasonItemActive: {
+    backgroundColor: Colors.accentLight,
+    borderWidth: 1,
+    borderColor: Colors.accent,
+  },
+  storyReportReasonText: {
+    fontSize: 14,
+    fontFamily: "Pretendard-Regular",
+    color: Colors.text,
+  },
+  storyReportReasonTextActive: {
+    color: Colors.accent,
+  },
+  storyReportCustomInput: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
+    fontFamily: "Pretendard-Regular",
+    color: Colors.text,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  storyReportBtnRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  storyReportCancelBtn: {
+    flex: 1,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 14,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  storyReportCancelBtnText: {
+    fontSize: 14,
+    fontFamily: "Pretendard-Regular",
+    color: Colors.text,
+  },
+  storyReportSubmitBtn: {
+    flex: 1,
+    backgroundColor: Colors.accent,
+    borderRadius: 14,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  storyReportSubmitBtnText: {
+    fontSize: 14,
+    fontFamily: "Pretendard-Medium",
+    color: Colors.white,
   },
   toastContainer: {
     position: "absolute",

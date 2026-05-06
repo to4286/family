@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Dimensions,
+  Platform,
 } from "react-native";
 import { Image } from "expo-image";
 import { decode } from "base64-arraybuffer";
@@ -373,13 +374,22 @@ export default function AlbumPhotosScreen({ route }: Props) {
 
       const validResults = results.filter((r): r is { publicUrl: string; originalDate: number } => r !== null);
 
+      let myMemberData: { id: number } | null = null;
+
       if (isMountedRef.current && validResults.length > 0) {
+        const { data: memberDataRow } = await supabase
+          .from("members")
+          .select("id")
+          .eq("auth_uid", user.id)
+          .single();
+        myMemberData = memberDataRow;
+
         try {
           const { error: insErr } = await supabase.from("photos").insert(
             validResults.map((r) => ({
               album_id: Number(folderId),
               image_url: r.publicUrl,
-              // DB에 없는 member_id, family_id는 제외하고 created_at은 ISO String으로 변환
+              uploader_id: myMemberData?.id ?? null,
               created_at: r.originalDate ? new Date(r.originalDate).toISOString() : new Date().toISOString(),
             }))
           );
@@ -392,12 +402,6 @@ export default function AlbumPhotosScreen({ route }: Props) {
       }
 
       try {
-        const { data: myMemberData } = await supabase
-          .from("members")
-          .select("id")
-          .eq("auth_uid", user.id)
-          .single();
-
         if (myMemberData) {
           await supabase.rpc("fn_notif_album_upload", {
             p_album_id: Number(folderId),
@@ -563,7 +567,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    bottom: 40,
+    bottom: Platform.OS === "android" ? 70 : 48,
     right: 24,
     backgroundColor: Colors.accent,
     borderRadius: 24,
