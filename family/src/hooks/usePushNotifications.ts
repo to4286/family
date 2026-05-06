@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { supabase } from '../utils/supabase';
 
 let Notifications: any = null;
 try {
-  Notifications = require('expo-notifications');
+  const isExpoGoAndroid = Constants.appOwnership === 'expo' && Platform.OS === 'android';
+  if (!isExpoGoAndroid) {
+    Notifications = require('expo-notifications');
+  }
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,

@@ -18,7 +18,15 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
-import * as Notifications from "expo-notifications";
+let Notifications: any = null;
+try {
+  const isExpoGoAndroid = Constants.appOwnership === "expo" && Platform.OS === "android";
+  if (!isExpoGoAndroid) {
+    Notifications = require("expo-notifications");
+  }
+} catch (e) {
+  console.log("expo-notifications 로드 불가 (Expo Go 환경)");
+}
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import * as AppleAuthentication from "expo-apple-authentication";
@@ -368,6 +376,7 @@ function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExist
 
       const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
         showInRecents: true,
+        createTask: false,
       });
 
       if (res.type === "success") {
@@ -734,6 +743,10 @@ function NotificationPermissionScreen({ finish }: { finish: () => void | Promise
   const insets = useSafeAreaInsets();
 
   const handleAllow = async () => {
+    if (!Notifications) {
+      finish();
+      return;
+    }
     const { status } = await Notifications.requestPermissionsAsync();
 
     if (status === "granted") {
@@ -918,13 +931,15 @@ export default function OnboardingScreen() {
       // 푸시 토큰 발급 실패 시에도 온보딩은 계속 진행
       let pushToken: string | null = null;
       try {
-        const { status } = await Notifications.getPermissionsAsync();
-        if (status === "granted") {
-          const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-          const tokenData = await Notifications.getExpoPushTokenAsync({
-            projectId,
-          });
-          pushToken = tokenData.data;
+        if (Notifications) {
+          const { status } = await Notifications.getPermissionsAsync();
+          if (status === "granted") {
+            const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+            const tokenData = await Notifications.getExpoPushTokenAsync({
+              projectId,
+            });
+            pushToken = tokenData.data;
+          }
         }
       } catch (error) {
         console.log("푸시 토큰 발급 실패 (온보딩은 정상 진행됨):", error);

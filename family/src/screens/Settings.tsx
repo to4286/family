@@ -13,7 +13,16 @@ import {
   KeyboardAvoidingView,
   Keyboard,
 } from "react-native";
-import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
+let Notifications: any = null;
+try {
+  const isExpoGoAndroid = Constants.appOwnership === "expo" && Platform.OS === "android";
+  if (!isExpoGoAndroid) {
+    Notifications = require("expo-notifications");
+  }
+} catch (e) {
+  console.log("expo-notifications 로드 불가 (Expo Go 환경)");
+}
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import Svg, { Path } from "react-native-svg";
@@ -291,8 +300,12 @@ export default function SettingsScreen() {
   useFocusEffect(
     useCallback(() => {
       const checkPermissionAndLoad = async () => {
-        const { status } = await Notifications.getPermissionsAsync();
-        setNotifAllowed(status === "granted");
+        if (Notifications) {
+          const { status } = await Notifications.getPermissionsAsync();
+          setNotifAllowed(status === "granted");
+        } else {
+          setNotifAllowed(false);
+        }
 
         try {
           const {
