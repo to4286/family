@@ -18,6 +18,7 @@ import {
   PanResponder,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -539,7 +540,17 @@ export default function AlbumDetailScreen({ route }: Props) {
         return;
       }
       if (imageUri) {
-        await MediaLibrary.saveToLibraryAsync(imageUri);
+        // 원격 URL이면 로컬에 먼저 다운로드
+        let localUri = imageUri;
+        if (imageUri.startsWith("http")) {
+          const fileName = imageUri.split("/").pop() || `photo_${Date.now()}.jpg`;
+          const downloadResult = await FileSystem.downloadAsync(
+            imageUri,
+            FileSystem.cacheDirectory + fileName
+          );
+          localUri = downloadResult.uri;
+        }
+        await MediaLibrary.saveToLibraryAsync(localUri);
       }
       closeBottomSheet(() => {
         triggerToast("✅", "사진을 저장했습니다");

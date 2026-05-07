@@ -18,15 +18,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
-let Notifications: any = null;
-try {
-  const isExpoGoAndroid = Constants.appOwnership === "expo" && Platform.OS === "android";
-  if (!isExpoGoAndroid) {
-    Notifications = require("expo-notifications");
-  }
-} catch (e) {
-  console.log("expo-notifications 로드 불가 (Expo Go 환경)");
-}
+import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import * as WebBrowser from "expo-web-browser";
 import * as AppleAuthentication from "expo-apple-authentication";
@@ -38,6 +30,8 @@ import { supabase, supabaseUrl } from "../utils/supabase";
 import { File } from "expo-file-system/next";
 import { decode } from "base64-arraybuffer";
 import { compressImage } from "../utils/imageCompress";
+
+const lounzipLogo = require("../assets/lounzip_logo.png");
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -345,95 +339,81 @@ function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExist
   };
 
   const handleGoogleLogin = async () => {
-    try {
-      const GOOGLE_REDIRECT_SCHEME = "familyapp";
-      const GOOGLE_REDIRECT_PATH = "google-callback";
-      const redirectTo = makeRedirectUri({
-        scheme: GOOGLE_REDIRECT_SCHEME,
-        path: GOOGLE_REDIRECT_PATH,
-      });
-
-      const alertLoginFail = (message: string) => {
-        Alert.alert("로그인 실패", message);
-      };
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
-      });
-
-      if (error) {
-        alertLoginFail(error.message);
+    const redirectTo = makeRedirectUri();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+    if (error) {
+      Alert.alert("로그인 실패", error.message);
+      return;
+    }
+    if (!data.url) {
+      Alert.alert("로그인 실패", "인증 주소를 가져올 수 없습니다.");
+      return;
+    }
+    const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (res.type === "success") {
+      const { params, errorCode } = getAuthCallbackParams(res.url);
+      if (errorCode) {
+        Alert.alert("로그인 실패", errorCode);
         return;
       }
-      if (!data.url) {
-        alertLoginFail("인증 주소를 가져올 수 없습니다.");
+      if (params.error) {
+        Alert.alert("로그인 실패", params.error_description || params.error);
         return;
       }
-
-      const res = await WebBrowser.openAuthSessionAsync(data.url, redirectTo, {
-        showInRecents: true,
-        createTask: false,
-      });
-
-      if (res.type === "success") {
-        const { params, errorCode } = getAuthCallbackParams(res.url);
-        if (errorCode) {
-          alertLoginFail(errorCode);
+      if (params.code) {
+        const { error: sessionError } = await supabase.auth.exchangeCodeForSession(params.code);
+        if (sessionError) {
+          Alert.alert("로그인 실패", sessionError.message);
           return;
         }
-        if (params.error) {
-          alertLoginFail(params.error_description || params.error);
+      } else {
+        const access_token = params.access_token;
+        const refresh_token = params.refresh_token;
+        if (!access_token || !refresh_token) {
+          Alert.alert("로그인 실패", "세션 정보를 응답에서 찾을 수 없습니다.");
           return;
         }
-        if (params.code) {
-          const { error: sessionError } = await supabase.auth.exchangeCodeForSession(params.code);
-          if (sessionError) {
-            alertLoginFail(sessionError.message);
-            return;
-          }
-        } else {
-          const access_token = params.access_token;
-          const refresh_token = params.refresh_token;
-          if (!access_token || !refresh_token) {
-            alertLoginFail("세션 정보를 응답에서 찾을 수 없습니다.");
-            return;
-          }
-          const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
-          if (sessionError) {
-            alertLoginFail(sessionError.message);
-            return;
-          }
+        const { error: sessionError } = await supabase.auth.setSession({ access_token, refresh_token });
+        if (sessionError) {
+          Alert.alert("로그인 실패", sessionError.message);
+          return;
         }
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: member } = await supabase
-            .from("members")
-            .select("id")
-            .eq("auth_uid", user.id)
-            .single();
-
-          if (member) {
-            onExistingMember();
-            return;
-          }
-        }
-        onNext();
-      } else if (res.type === "dismiss") {
-        console.log("구글 로그인 브라우저 닫힘");
       }
-    } catch (e: any) {
-      Alert.alert("로그인 오류", e.message || String(e));
+      // 이미 가입된 회원인지 확인
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: member } = await supabase
+          .from("members")
+          .select("id")
+          .eq("auth_uid", user.id)
+          .single();
+
+        if (member) {
+          onExistingMember();
+          return;
+        }
+      }
+      onNext();
     }
   };
 
   return (
     <View style={[styles.screen, { paddingTop: 32, backgroundColor: Colors.bg }]}>
       <View style={styles.loginHero}>
-        <View style={styles.loginAccentBar} />
+        <Image
+          source={lounzipLogo}
+          style={{
+            width: 100,
+            height: 100,
+            borderRadius: 28,
+            marginBottom: 10,
+            alignSelf: "flex-start",
+          }}
+          resizeMode="contain"
+        />
         <Text style={styles.loginTitle}>라운집</Text>
         <Text style={styles.loginSubtitle}>멈췄던 대화가 흐르는 공간</Text>
         <View style={styles.socialBtns}>
@@ -743,10 +723,6 @@ function NotificationPermissionScreen({ finish }: { finish: () => void | Promise
   const insets = useSafeAreaInsets();
 
   const handleAllow = async () => {
-    if (!Notifications) {
-      finish();
-      return;
-    }
     const { status } = await Notifications.requestPermissionsAsync();
 
     if (status === "granted") {
@@ -931,15 +907,13 @@ export default function OnboardingScreen() {
       // 푸시 토큰 발급 실패 시에도 온보딩은 계속 진행
       let pushToken: string | null = null;
       try {
-        if (Notifications) {
-          const { status } = await Notifications.getPermissionsAsync();
-          if (status === "granted") {
-            const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-            const tokenData = await Notifications.getExpoPushTokenAsync({
-              projectId,
-            });
-            pushToken = tokenData.data;
-          }
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status === "granted") {
+          const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+          const tokenData = await Notifications.getExpoPushTokenAsync({
+            projectId,
+          });
+          pushToken = tokenData.data;
         }
       } catch (error) {
         console.log("푸시 토큰 발급 실패 (온보딩은 정상 진행됨):", error);
@@ -1063,7 +1037,7 @@ const styles = StyleSheet.create({
   loginHero: { flex: 1, justifyContent: "flex-end", paddingBottom: 48 },
   loginAccentBar: { width: 32, height: 3, borderRadius: 2, backgroundColor: Colors.accent, marginBottom: 16, opacity: 0.8 },
   loginTitle: { fontSize: 28, fontFamily: "Pretendard-Medium", color: Colors.text, lineHeight: 40, marginBottom: 10 },
-  loginSubtitle: { fontSize: 14, fontFamily: "Pretendard-Regular", color: Colors.textSub, lineHeight: 24, marginBottom: 48 },
+  loginSubtitle: { fontSize: 16, fontFamily: "Pretendard-Regular", color: Colors.textSub, lineHeight: 24, marginBottom: 48 },
   socialBtns: { gap: 12 },
   // 모든 소셜 로그인 버튼: borderRadius 12로 통일 (살짝 라운드)
   naverBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 15, borderRadius: 12, backgroundColor: "#03C75A" },

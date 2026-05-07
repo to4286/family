@@ -62,7 +62,7 @@ export default function ConceptCategoriesScreen({ route }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<MainTabStackParamList>>();
   const { memberId, memberNickname, relationship } = route.params;
 
-  const headerTitle = `${memberNickname}${getTopicParticle(memberNickname)} 어떤 사람일까요?`;
+  const headerTitle = `${memberNickname}님${getTopicParticle("님")} 어떤 사람일까요?`;
 
   const [answerCounts, setAnswerCounts] = useState<Record<number, number>>({});
 
