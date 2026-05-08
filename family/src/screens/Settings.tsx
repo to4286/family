@@ -384,8 +384,11 @@ export default function SettingsScreen() {
 
         if (!myMember) return;
 
-        const profilePath = `${user.id}/profile.jpg`;
-        await supabase.storage.from("profiles").remove([profilePath]);
+        const { data: profileFiles } = await supabase.storage.from("profiles").list(user.id);
+        if (profileFiles && profileFiles.length > 0) {
+          const profilePaths = profileFiles.map((f) => `${user.id}/${f.name}`);
+          await supabase.storage.from("profiles").remove(profilePaths);
+        }
 
         const { data: storyFiles } = await supabase.storage.from("stories").list(String(myMember.id));
         if (storyFiles && storyFiles.length > 0) {
@@ -411,6 +414,11 @@ export default function SettingsScreen() {
         const cleanupFamilyAlbumFn = "cleanup-family-album";
         await supabase.functions.invoke(cleanupFamilyAlbumFn, {
           body: { family_id: myMember.family_id },
+        });
+
+        // Auth에서 유저 삭제
+        await supabase.functions.invoke('delete-auth-user', {
+          body: { user_id: user.id },
         });
 
         await supabase.auth.signOut();

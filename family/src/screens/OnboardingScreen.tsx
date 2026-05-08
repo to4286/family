@@ -65,6 +65,7 @@ const FAMILY_TYPES = [
 ];
 
 const AGREEMENT_ITEMS = [
+  { key: "age" as const, label: "만 14세 이상입니다", req: true, url: null },
   { key: "terms" as const, label: "서비스 이용약관 동의", req: true, url: "https://www.notion.so/34ff9aeb2c4780e4bac3cdbbc8e7d777" },
   { key: "privacy" as const, label: "개인정보 수집 동의", req: true, url: "https://www.notion.so/34ff9aeb2c4780249717cfbe6ff7480a" },
   { key: "marketing" as const, label: "마케팅 수신 동의", req: false, url: null },
@@ -446,13 +447,13 @@ function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExist
 }
 
 function AgreementScreen({ onNext, checks, setChecks }: any) {
-  const allChecked = checks.terms && checks.privacy && checks.marketing;
+  const allChecked = checks.age && checks.terms && checks.privacy && checks.marketing;
   const toggle = (key: any) => setChecks((prev: any) => ({ ...prev, [key]: !prev[key] }));
   const toggleAll = () => {
     const next = !allChecked;
-    setChecks({ terms: next, privacy: next, marketing: next });
+    setChecks({ age: next, terms: next, privacy: next, marketing: next });
   };
-  const canNext = checks.terms && checks.privacy;
+  const canNext = checks.age && checks.terms && checks.privacy;
   return (
     <View style={[styles.screen, styles.screenTopAgreement]}>
       <Text style={[styles.screenTitle, { marginBottom: 40 }]}>{"서비스 이용을 위한\n동의가 필요해요"}</Text>
@@ -803,7 +804,7 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState(0);
   const [isJoiningByCode, setIsJoiningByCode] = useState(false);
 
-  const [checks, setChecks] = useState({ terms: false, privacy: false, marketing: false });
+  const [checks, setChecks] = useState({ age: false, terms: false, privacy: false, marketing: false });
   const [code, setCode] = useState("");
   const [role, setRole] = useState<number | null>(null);
   const [nickname, setNickname] = useState("");
