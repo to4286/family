@@ -235,7 +235,7 @@ function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExist
 
       // 앱이 받을 deep link (Edge Function이 처리 후 redirect)
       const appRedirectUri = makeRedirectUri({
-        scheme: "com.lounzip.app",
+        scheme: "familyapp",
         path: "naver-callback",
       });
 
@@ -418,6 +418,8 @@ function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExist
         <Text style={styles.loginTitle}>라운집</Text>
         <Text style={styles.loginSubtitle}>멈췄던 대화가 흐르는 공간</Text>
         <View style={styles.socialBtns}>
+          {/* [구글 심사 통과용 임시 숨김 처리]
+              추후 애플 개발자 계정 세팅 완료 후 주석을 해제하세요.
           {Platform.OS === "ios" ? (
             <AppleAuthentication.AppleAuthenticationButton
               buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
@@ -432,6 +434,7 @@ function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExist
               <Text style={styles.appleBtnText}>Apple로 로그인</Text>
             </TouchableOpacity>
           )}
+          */}
           <TouchableOpacity onPress={handleNaverLogin} activeOpacity={0.8} style={styles.naverBtn}>
             <NaverLogoIcon size={18} />
             <Text style={styles.naverBtnText}>네이버로 로그인</Text>
