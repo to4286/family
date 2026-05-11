@@ -614,7 +614,12 @@ function ProfilePhotoScreen({ onNext, profileImage, showPhotoModal, setShowPhoto
           <View
             style={[
               styles.photoCircle,
-              { backgroundColor: hasPhoto ? Colors.surface : Colors.bg, borderColor: hasPhoto ? Colors.accent : Colors.border, overflow: "hidden" },
+              {
+                backgroundColor: hasPhoto ? Colors.surface : Colors.bg,
+                borderColor: hasPhoto ? "transparent" : Colors.border,
+                borderWidth: hasPhoto ? 0 : 2,
+                overflow: "hidden",
+              },
             ]}
           >
             {hasPhoto && profileImage ? (
