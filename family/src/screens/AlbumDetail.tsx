@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
-  Image,
   TextInput,
   TouchableOpacity,
   ScrollView,
@@ -17,6 +16,7 @@ import {
   SafeAreaView,
   PanResponder,
 } from "react-native";
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
@@ -66,6 +66,10 @@ const BOTTOM_SHEET_OPEN_MS = 250;
 const BOTTOM_SHEET_CLOSE_MS = 200;
 
 const { height: WINDOW_HEIGHT } = Dimensions.get("window");
+
+function remoteImageCache(uri: string): { cachePolicy: "memory-disk" } | undefined {
+  return uri.startsWith("http") ? { cachePolicy: "memory-disk" } : undefined;
+}
 
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -614,7 +618,14 @@ export default function AlbumDetailScreen({ route }: Props) {
 
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <TouchableOpacity style={styles.photo} activeOpacity={0.95} onPress={openFullscreen}>
-            {imageUri ? <Image source={{ uri: imageUri }} style={styles.photoImage} resizeMode="cover" /> : null}
+            {imageUri ? (
+              <Image
+                source={{ uri: imageUri }}
+                style={styles.photoImage}
+                contentFit="cover"
+                {...remoteImageCache(imageUri)}
+              />
+            ) : null}
           </TouchableOpacity>
 
           <View style={styles.commentSection}>
@@ -625,7 +636,12 @@ export default function AlbumDetailScreen({ route }: Props) {
               comments.map((c) => (
                 <View key={c.id} style={styles.commentRow}>
                   {c.memberPhotoUri ? (
-                    <Image source={{ uri: c.memberPhotoUri }} style={styles.commentAvatar} />
+                    <Image
+                      source={{ uri: c.memberPhotoUri }}
+                      style={styles.commentAvatar}
+                      contentFit="cover"
+                      {...remoteImageCache(c.memberPhotoUri)}
+                    />
                   ) : (
                     <View
                       style={[
@@ -668,7 +684,12 @@ export default function AlbumDetailScreen({ route }: Props) {
           style={[styles.inputContainer, { paddingBottom: keyboardVisible ? 8 : insets.bottom + 12 }]}
         >
             {myProfile?.profile_image_url ? (
-              <Image source={{ uri: myProfile.profile_image_url }} style={styles.myAvatar} />
+              <Image
+                source={{ uri: myProfile.profile_image_url }}
+                style={styles.myAvatar}
+                contentFit="cover"
+                {...remoteImageCache(myProfile.profile_image_url)}
+              />
             ) : (
               <View
                 style={[
@@ -770,7 +791,14 @@ export default function AlbumDetailScreen({ route }: Props) {
               {...panResponder.panHandlers}
               style={[styles.fullScreenPhotoContainer, { transform: [{ translateY: panY }] }]}
             >
-              {imageUri ? <Image source={{ uri: imageUri }} style={styles.fullScreenPhoto} resizeMode="contain" /> : null}
+              {imageUri ? (
+                <Image
+                  source={{ uri: imageUri }}
+                  style={styles.fullScreenPhoto}
+                  contentFit="contain"
+                  {...remoteImageCache(imageUri)}
+                />
+              ) : null}
             </Animated.View>
           </SafeAreaView>
         </Animated.View>

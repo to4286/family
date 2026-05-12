@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TextInput,
-  Image,
   Modal,
   TouchableOpacity,
   TouchableWithoutFeedback,
@@ -15,6 +14,7 @@ import {
   Dimensions,
   Animated,
 } from "react-native";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Colors } from "../constants/colors";
@@ -67,6 +67,10 @@ const BOTTOM_SHEET_OPEN_MS = 250;
 const BOTTOM_SHEET_CLOSE_MS = 200;
 
 const STORY_REPORT_REASONS = ["부적절한 댓글", "불쾌한 콘텐츠", "기타 (직접 입력)"] as const;
+
+function remoteImageCache(uri: string): { cachePolicy: "memory-disk" } | undefined {
+  return uri.startsWith("http") ? { cachePolicy: "memory-disk" } : undefined;
+}
 
 export default function CommentSheet({
   visible,
@@ -264,7 +268,12 @@ export default function CommentSheet({
           >
             {!keyboardVisible && photoUri && (
               <View style={styles.photoPreviewWrap}>
-                <Image source={{ uri: photoUri }} style={styles.photoPreview} resizeMode="cover" />
+                <Image
+                  source={{ uri: photoUri }}
+                  style={styles.photoPreview}
+                  contentFit="cover"
+                  {...remoteImageCache(photoUri)}
+                />
               </View>
             )}
           </View>
@@ -294,7 +303,12 @@ export default function CommentSheet({
               comments.map((c) => (
                 <View key={c.id} style={styles.commentItem}>
                   {c.memberPhotoUri ? (
-                    <Image source={{ uri: c.memberPhotoUri }} style={styles.commentAvatarImage} />
+                    <Image
+                      source={{ uri: c.memberPhotoUri }}
+                      style={styles.commentAvatarImage}
+                      contentFit="cover"
+                      {...remoteImageCache(c.memberPhotoUri)}
+                    />
                   ) : (
                     <View style={[styles.commentAvatar, { alignItems: "center", justifyContent: "center" }]}>
                       <Ionicons name="person" size={20} color={Colors.textHint} />
@@ -334,7 +348,12 @@ export default function CommentSheet({
             ]}
           >
             {myPhotoUri ? (
-              <Image source={{ uri: myPhotoUri }} style={styles.myAvatar} />
+              <Image
+                source={{ uri: myPhotoUri }}
+                style={styles.myAvatar}
+                contentFit="cover"
+                {...remoteImageCache(myPhotoUri)}
+              />
             ) : (
               <View
                 style={[styles.myAvatar, { backgroundColor: Colors.surface, alignItems: "center", justifyContent: "center" }]}

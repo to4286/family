@@ -4,7 +4,6 @@ import {
   Animated,
   Dimensions,
   FlatList,
-  Image,
   Keyboard,
   KeyboardAvoidingView,
   Modal,
@@ -21,6 +20,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
+import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -73,6 +73,11 @@ function logCommentsApiFailure(
   } else {
     console.log(`[${operation}] error:`, err);
   }
+}
+
+/** 원격(http/https) 이미지만 메모리+디스크 캐시 (로컬 file:// 등은 제외) */
+function remoteImageCache(uri: string): { cachePolicy: "memory-disk" } | undefined {
+  return uri.startsWith("http") ? { cachePolicy: "memory-disk" } : undefined;
 }
 
 function formatRelativeCommentTime(iso: string): string {
@@ -329,7 +334,12 @@ function TodayMemoryCard({ memory }: { memory: TodayMemoryData | null }) {
             })
           }
         >
-          <Image source={{ uri: memory.imageUri }} style={styles.todayImage} resizeMode="cover" />
+          <Image
+            source={{ uri: memory.imageUri }}
+            style={styles.todayImage}
+            contentFit="cover"
+            {...remoteImageCache(memory.imageUri)}
+          />
           <View style={styles.todayDateBadge} pointerEvents="none">
             <Text style={styles.todayDateText}>{memory.date}</Text>
           </View>
@@ -583,7 +593,8 @@ function PhotoSwiper({
               <Image
                 source={{ uri: item.imageUri }}
                 style={[styles.photoImage, { width: PHOTO_WIDTH }]}
-                resizeMode="cover"
+                contentFit="cover"
+                {...remoteImageCache(item.imageUri)}
               />
             </TouchableOpacity>
             <UploadTimeBadge time={item.uploadedAt} />
@@ -1557,7 +1568,8 @@ export default function HomeScreen() {
                       <Image
                         source={{ uri: m.photoUri }}
                         style={styles.profileImage}
-                        resizeMode="cover"
+                        contentFit="cover"
+                        {...remoteImageCache(m.photoUri)}
                       />
                     ) : (
                       <View style={[styles.profileImage, { alignItems: "center", justifyContent: "center", backgroundColor: Colors.surface }]}>
@@ -1759,7 +1771,12 @@ export default function HomeScreen() {
               style={[styles.storyFullscreenImageWrap, { transform: [{ translateY: storyPanY }] }]}
             >
               {fullscreenStoryUri ? (
-                <Image source={{ uri: fullscreenStoryUri }} style={styles.storyFullscreenImage} resizeMode="contain" />
+                <Image
+                  source={{ uri: fullscreenStoryUri }}
+                  style={styles.storyFullscreenImage}
+                  contentFit="contain"
+                  {...remoteImageCache(fullscreenStoryUri)}
+                />
               ) : null}
             </Animated.View>
           </SafeAreaView>

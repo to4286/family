@@ -4,14 +4,14 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
-  Modal,
   TouchableWithoutFeedback,
   FlatList,
   ActivityIndicator,
   Alert,
   Animated,
+  Modal,
 } from "react-native";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -29,6 +29,10 @@ import { supabase } from "../utils/supabase";
 import CheckCircleIcon from "../components/CheckCircleIcon";
 
 const BLOCK_BRAND_RED = "#E85A5A";
+
+function remoteImageCache(uri: string): { cachePolicy: "memory-disk" } | undefined {
+  return uri.startsWith("http") ? { cachePolicy: "memory-disk" } : undefined;
+}
 
 type MemberRow = {
   id: number;
@@ -326,7 +330,12 @@ export default function MemberManagementScreen() {
           renderItem={({ item }) => (
             <View style={styles.row}>
               {item.profile_image_url ? (
-                <Image source={{ uri: item.profile_image_url }} style={styles.avatar} resizeMode="cover" />
+                <Image
+                  source={{ uri: item.profile_image_url }}
+                  style={styles.avatar}
+                  contentFit="cover"
+                  {...remoteImageCache(item.profile_image_url)}
+                />
               ) : (
                 <DefaultAvatar />
               )}

@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
-  Image,
   TouchableOpacity,
   ScrollView,
   TextInput,
@@ -12,6 +11,7 @@ import {
   Animated,
   Platform,
 } from "react-native";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
@@ -51,6 +51,10 @@ const FOLDER_MENU_DOT_SIZE = 4;
 const BOTTOM_SHEET_SLIDE_OFFSET = 300;
 const BOTTOM_SHEET_OPEN_MS = 250;
 const BOTTOM_SHEET_CLOSE_MS = 200;
+
+function remoteImageCache(uri: string): { cachePolicy: "memory-disk" } | undefined {
+  return uri.startsWith("http") ? { cachePolicy: "memory-disk" } : undefined;
+}
 
 // ─── Shared Components ─────────────────────────────────────────────────────────
 
@@ -485,7 +489,12 @@ export default function AlbumScreen() {
                   style={[styles.folderCover, { backgroundColor: folder.coverColor }]}
                 >
                   {folder.coverUri && (
-                    <Image source={{ uri: folder.coverUri }} style={styles.folderCoverImage} resizeMode="cover" />
+                    <Image
+                      source={{ uri: folder.coverUri }}
+                      style={styles.folderCoverImage}
+                      contentFit="cover"
+                      {...remoteImageCache(folder.coverUri)}
+                    />
                   )}
                   <TouchableOpacity
                     style={styles.folderMenuBtn}

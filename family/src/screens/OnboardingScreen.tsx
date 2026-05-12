@@ -14,8 +14,8 @@ import {
   Animated,
   Modal,
   ScrollView,
-  Image,
 } from "react-native";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
@@ -76,6 +76,10 @@ const MAX_NICKNAME = 6;
 const ERROR_COLOR = "#D4645A"; // 설정 화면과 통일된 에러 컬러
 
 const INVITE_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function remoteImageCache(uri: string): { cachePolicy: "memory-disk" } | undefined {
+  return uri.startsWith("http") ? { cachePolicy: "memory-disk" } : undefined;
+}
 
 function generateInviteCode(): string {
   let result = "";
@@ -413,7 +417,7 @@ function LoginScreen({ onNext, onExistingMember }: { onNext: () => void; onExist
             marginBottom: 10,
             alignSelf: "flex-start",
           }}
-          resizeMode="contain"
+          contentFit="contain"
         />
         <Text style={styles.loginTitle}>라운집</Text>
         <Text style={styles.loginSubtitle}>멈췄던 대화가 흐르는 공간</Text>
@@ -623,7 +627,12 @@ function ProfilePhotoScreen({ onNext, profileImage, showPhotoModal, setShowPhoto
             ]}
           >
             {hasPhoto && profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.profilePickImage} resizeMode="cover" />
+              <Image
+                source={{ uri: profileImage }}
+                style={styles.profilePickImage}
+                contentFit="cover"
+                {...remoteImageCache(profileImage)}
+              />
             ) : (
               <Text style={styles.photoPlusIcon}>+</Text>
             )}

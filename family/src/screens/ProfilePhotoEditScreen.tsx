@@ -6,10 +6,10 @@ import {
   TouchableWithoutFeedback,
   StyleSheet,
   Modal,
-  Image,
   Alert,
   DeviceEventEmitter,
 } from "react-native";
+import { Image } from "expo-image";
 import { File } from "expo-file-system/next";
 import { decode } from "base64-arraybuffer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,6 +22,10 @@ import { useStoryImagePicker } from "../hooks/useStoryImagePicker";
 import PhotoSelectionModal from "../components/PhotoSelectionModal";
 import { supabase } from "../utils/supabase";
 import { compressImage } from "../utils/imageCompress";
+
+function remoteImageCache(uri: string): { cachePolicy: "memory-disk" } | undefined {
+  return uri.startsWith("http") ? { cachePolicy: "memory-disk" } : undefined;
+}
 
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -197,7 +201,12 @@ export default function ProfilePhotoEditScreen() {
               ]}
             >
               {hasPhoto ? (
-                <Image source={{ uri: imageUri! }} style={styles.profilePickImage} resizeMode="cover" />
+                <Image
+                  source={{ uri: imageUri! }}
+                  style={styles.profilePickImage}
+                  contentFit="cover"
+                  {...remoteImageCache(imageUri!)}
+                />
               ) : (
                 <Text style={styles.photoPlusIcon}>+</Text>
               )}

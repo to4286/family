@@ -53,6 +53,10 @@ const GRID_GAP = 3;
 const GRID_PADDING = 3;
 const GRID_COL3 = (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP * 2) / 3;
 
+function remoteImageCache(uri: string): { cachePolicy: "memory-disk" } | undefined {
+  return uri.startsWith("http") ? { cachePolicy: "memory-disk" } : undefined;
+}
+
 // ─── ChevronLeft (알림 화면과 동일) ────────────────────────────────────────────
 
 function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
@@ -94,6 +98,7 @@ function PhotoGrid({ photos, onPhotoPress }: { photos: Photo[]; onPhotoPress: (p
                   style={{ width: "100%", height: "100%" }}
                   contentFit="cover"
                   transition={200}
+                  {...remoteImageCache(ph.imageUri)}
                 />
               )}
             </TouchableOpacity>
@@ -126,6 +131,7 @@ function PhotoGrid({ photos, onPhotoPress }: { photos: Photo[]; onPhotoPress: (p
                 style={{ width: "100%", height: "100%" }}
                 contentFit="cover"
                 transition={200}
+                {...remoteImageCache(big.imageUri)}
               />
             )}
           </TouchableOpacity>
@@ -150,6 +156,7 @@ function PhotoGrid({ photos, onPhotoPress }: { photos: Photo[]; onPhotoPress: (p
                       style={{ width: "100%", height: "100%" }}
                       contentFit="cover"
                       transition={200}
+                      {...remoteImageCache(sm1.imageUri)}
                     />
                   )}
                 </TouchableOpacity>
@@ -172,6 +179,7 @@ function PhotoGrid({ photos, onPhotoPress }: { photos: Photo[]; onPhotoPress: (p
                       style={{ width: "100%", height: "100%" }}
                       contentFit="cover"
                       transition={200}
+                      {...remoteImageCache(sm2.imageUri)}
                     />
                   )}
                 </TouchableOpacity>
@@ -192,6 +200,7 @@ function PhotoGrid({ photos, onPhotoPress }: { photos: Photo[]; onPhotoPress: (p
               style={{ width: "100%", height: "100%" }}
               contentFit="cover"
               transition={200}
+              {...remoteImageCache(ph.imageUri)}
             />
           )}
         </TouchableOpacity>
@@ -210,6 +219,7 @@ function PhotoGrid({ photos, onPhotoPress }: { photos: Photo[]; onPhotoPress: (p
                   style={{ width: "100%", height: "100%" }}
                   contentFit="cover"
                   transition={200}
+                  {...remoteImageCache(ph.imageUri)}
                 />
               )}
             </TouchableOpacity>
@@ -468,6 +478,7 @@ export default function AlbumPhotosScreen({ route }: Props) {
               style={styles.heroImage}
               contentFit="cover"
               transition={200}
+              {...remoteImageCache(heroPhoto.imageUri)}
             />
           )}
           <View style={styles.heroContent}>

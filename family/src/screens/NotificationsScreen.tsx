@@ -254,10 +254,7 @@ export default function NotificationsScreen() {
           break;
 
         case "poke":
-          // 콕 찌르기 → 홈화면으로 이동 (내 프로필 선택)
-          navigation.navigate("MainTab" as any, {
-            screen: "Home",
-          });
+          // 콕 찌르기 → 아무 동작 없음
           break;
 
         case "story_comment":

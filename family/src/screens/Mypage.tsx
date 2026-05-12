@@ -4,13 +4,13 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   ScrollView,
   Animated,
   Modal,
   Linking,
   DeviceEventEmitter, // 🚀 앱 내부 신호 전달을 위한 무전기 추가
 } from "react-native";
+import { Image } from "expo-image";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { supabase } from "../utils/supabase";
@@ -42,6 +42,10 @@ const headerControlShadow = {
 const BOTTOM_SHEET_SLIDE_OFFSET = 300;
 const BOTTOM_SHEET_OPEN_MS = 250;
 const BOTTOM_SHEET_CLOSE_MS = 200;
+
+function remoteImageCache(uri: string): { cachePolicy: "memory-disk" } | undefined {
+  return uri.startsWith("http") ? { cachePolicy: "memory-disk" } : undefined;
+}
 
 const ROLE_MAPPING: Record<string, string> = {
   "아빠": "든든한 버팀목",
@@ -256,7 +260,12 @@ export default function MypageScreen() {
           <Text style={styles.sectionTitle}>내 정보</Text>
           <View style={styles.profileRow}>
             {profilePhotoUri ? (
-              <Image source={{ uri: profilePhotoUri }} style={styles.profileImageRow} resizeMode="cover" />
+              <Image
+                source={{ uri: profilePhotoUri }}
+                style={styles.profileImageRow}
+                contentFit="cover"
+                {...remoteImageCache(profilePhotoUri)}
+              />
             ) : (
               <View
                 style={[
