@@ -20,7 +20,8 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
-import { Image } from "expo-image";
+import Constants from "expo-constants";
+import { Image as ExpoImage } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -48,6 +49,39 @@ import CommentSheet from "../components/CommentSheet";
 import type { Comment } from "../components/CommentSheet";
 import PhotoSelectionModal from "../components/PhotoSelectionModal";
 import type { ConceptRelationship, MainTabParamList, MainTabStackParamList } from "../navigation/types";
+
+let ImageZoom: any = null;
+const isExpoGo = Constants.appOwnership === "expo";
+if (!isExpoGo) {
+  try {
+    ImageZoom = require("@likashefqet/react-native-image-zoom").ImageZoom;
+  } catch (e) {
+    ImageZoom = null;
+  }
+}
+
+let useAnimatedReaction: any = null;
+let useSharedValue: any = null;
+let runOnJS: any = null;
+
+const isExpoGoHome = Constants.appOwnership === "expo";
+if (!isExpoGoHome) {
+  try {
+    const reanimated = require("react-native-reanimated");
+    useAnimatedReaction = reanimated.useAnimatedReaction;
+    useSharedValue = reanimated.useSharedValue;
+    runOnJS = reanimated.runOnJS;
+  } catch (e) {}
+}
+if (!useSharedValue) {
+  useSharedValue = (initial: number) => ({ value: initial });
+}
+if (!useAnimatedReaction) {
+  useAnimatedReaction = () => {};
+}
+if (!runOnJS) {
+  runOnJS = (fn: (...args: unknown[]) => unknown) => fn;
+}
 
 const STORY_EXPIRES_DAYS = 1;
 
@@ -334,7 +368,7 @@ function TodayMemoryCard({ memory }: { memory: TodayMemoryData | null }) {
             })
           }
         >
-          <Image
+          <ExpoImage
             source={{ uri: memory.imageUri }}
             style={styles.todayImage}
             contentFit="cover"
@@ -590,7 +624,7 @@ function PhotoSwiper({
         renderItem={({ item }) => (
           <View style={[styles.photoFrame, { width: PHOTO_WIDTH }]}>
             <TouchableOpacity activeOpacity={0.95} onPress={() => onOpenFullscreen(item)}>
-              <Image
+              <ExpoImage
                 source={{ uri: item.imageUri }}
                 style={[styles.photoImage, { width: PHOTO_WIDTH }]}
                 contentFit="cover"
@@ -685,6 +719,19 @@ export default function HomeScreen() {
 
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
+  const storyZoomScale = useRef(1);
+  const storyZoomScaleShared = useSharedValue(1);
+  const storyImageZoomRef = useRef<any>(null);
+
+  useAnimatedReaction(
+    () => storyZoomScaleShared.value,
+    (scale: number) => {
+      runOnJS((s: number) => {
+        storyZoomScale.current = s;
+      })(scale);
+    }
+  );
+
   const myMemberRef = useRef<{ id: number; familyId: number } | null>(null);
 
   const route = useRoute<RouteProp<MainTabParamList, "Home">>();
@@ -702,26 +749,41 @@ export default function HomeScreen() {
   }, []);
 
   const closeStoryFullscreen = useCallback(() => {
+    storyZoomScale.current = 1;
+    storyZoomScaleShared.value = 1;
+    storyImageZoomRef.current?.reset();
     setShowStoryFullscreen(false);
-  }, []);
+  }, [storyZoomScaleShared]);
 
   const openStoryFullscreen = useCallback((photo: MemberPhoto) => {
     storyPanY.setValue(0);
+    storyZoomScale.current = 1;
+    storyZoomScaleShared.value = 1;
     setFullscreenStoryUri(photo.imageUri);
     setShowStoryFullscreen(true);
-  }, [storyPanY]);
+  }, [storyPanY, storyZoomScaleShared]);
 
   const storyPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) =>
-        Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 10,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        if (storyZoomScale.current > 1) return false;
+        return Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 10;
+      },
       onPanResponderMove: (_, gestureState) => {
+        if (storyZoomScale.current > 1) return;
         if (gestureState.dy > 0) {
           storyPanY.setValue(gestureState.dy);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
+        if (storyZoomScale.current > 1) {
+          Animated.spring(storyPanY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+          return;
+        }
         if (gestureState.dy > 150 || gestureState.vy > 1.5) {
           Animated.timing(storyPanY, {
             toValue: WINDOW_HEIGHT,
@@ -1565,7 +1627,7 @@ export default function HomeScreen() {
                     ]}
                   >
                     {m.photoUri ? (
-                      <Image
+                      <ExpoImage
                         source={{ uri: m.photoUri }}
                         style={styles.profileImage}
                         contentFit="cover"
@@ -1771,12 +1833,34 @@ export default function HomeScreen() {
               style={[styles.storyFullscreenImageWrap, { transform: [{ translateY: storyPanY }] }]}
             >
               {fullscreenStoryUri ? (
-                <Image
-                  source={{ uri: fullscreenStoryUri }}
-                  style={styles.storyFullscreenImage}
-                  contentFit="contain"
-                  {...remoteImageCache(fullscreenStoryUri)}
-                />
+                ImageZoom ? (
+                  <ImageZoom
+                    ref={storyImageZoomRef}
+                    key={fullscreenStoryUri}
+                    uri={fullscreenStoryUri}
+                    scale={storyZoomScaleShared}
+                    minScale={1}
+                    maxScale={5}
+                    doubleTapScale={3}
+                    isDoubleTapEnabled
+                    isPanEnabled
+                    isPinchEnabled
+                    style={styles.storyFullscreenImage}
+                    resizeMode="contain"
+                    {...({
+                      onScaleChanged: (scale: number) => {
+                        storyZoomScale.current = scale;
+                      },
+                    } as any)}
+                  />
+                ) : (
+                  <ExpoImage
+                    source={{ uri: fullscreenStoryUri }}
+                    style={styles.storyFullscreenImage}
+                    contentFit="contain"
+                    {...remoteImageCache(fullscreenStoryUri)}
+                  />
+                )
               ) : null}
             </Animated.View>
           </SafeAreaView>

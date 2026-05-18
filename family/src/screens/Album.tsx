@@ -35,6 +35,7 @@ type Folder = {
 // ─── Data ──────────────────────────────────────────────────────────────────────
 
 const FOLDER_COLORS = ["#D4B896", "#C9A882", "#E8C9A0", "#B89878", "#DDBF9A"];
+const FOLDER_LIMIT = 5;
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const FOLDER_GAP = 14;
@@ -68,10 +69,11 @@ function FloatingActionButton({ label, onPress }: { label: string; onPress: () =
 
 // ─── New Folder Modal ──────────────────────────────────────────────────────────
 
-function NewFolderModal({ visible, onClose, onCreate }: {
+function NewFolderModal({ visible, onClose, onCreate, folderCount }: {
   visible: boolean;
   onClose: () => void;
   onCreate: (name: string) => void;
+  folderCount: number;
 }) {
   const [name, setName] = useState("");
 
@@ -95,24 +97,68 @@ function NewFolderModal({ visible, onClose, onCreate }: {
           <TouchableOpacity style={styles.modalCloseBtn} onPress={onClose}>
             <Text style={styles.modalCloseBtnText}>✕</Text>
           </TouchableOpacity>
-          <Text style={styles.modalTitle}>새 앨범 만들기</Text>
-          <TextInput
-            style={[styles.modalInput, name ? { borderColor: Colors.accent } : {}]}
-            value={name}
-            onChangeText={setName}
-            placeholder="앨범 이름을 입력해주세요"
-            placeholderTextColor={Colors.textHint}
-            autoFocus
-            maxLength={20}
-          />
-          <TouchableOpacity
-            style={[styles.modalCreateBtn, !name.trim() && { backgroundColor: Colors.border }]}
-            onPress={handleCreate}
-            disabled={!name.trim()}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.modalCreateBtnText}>만들기</Text>
-          </TouchableOpacity>
+
+          {folderCount >= FOLDER_LIMIT ? (
+            <>
+              <Text style={styles.modalTitle}>더 이상 앨범을 생성할 수 없어요</Text>
+              <View style={{ alignItems: "center", marginTop: 12, marginBottom: 20 }}>
+                <View style={{
+                  backgroundColor: "#FDEAEA",
+                  paddingHorizontal: 14,
+                  paddingVertical: 6,
+                  borderRadius: 12,
+                }}>
+                  <Text style={{
+                    fontSize: 14,
+                    fontFamily: "Pretendard-Medium",
+                    color: "#E85A5A",
+                  }}>{folderCount}/{FOLDER_LIMIT}</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCreateBtn}
+                onPress={onClose}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalCreateBtnText}>확인</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.modalTitle}>새 앨범 만들기</Text>
+              <View style={{ alignItems: "center", marginTop: 8, marginBottom: 12 }}>
+                <View style={{
+                  backgroundColor: Colors.accentLight,
+                  paddingHorizontal: 14,
+                  paddingVertical: 6,
+                  borderRadius: 12,
+                }}>
+                  <Text style={{
+                    fontSize: 14,
+                    fontFamily: "Pretendard-Medium",
+                    color: Colors.accent,
+                  }}>{folderCount}/{FOLDER_LIMIT}</Text>
+                </View>
+              </View>
+              <TextInput
+                style={[styles.modalInput, name ? { borderColor: Colors.accent } : {}]}
+                value={name}
+                onChangeText={setName}
+                placeholder="앨범 이름을 입력해주세요"
+                placeholderTextColor={Colors.textHint}
+                autoFocus
+                maxLength={20}
+              />
+              <TouchableOpacity
+                style={[styles.modalCreateBtn, !name.trim() && { backgroundColor: Colors.border }]}
+                onPress={handleCreate}
+                disabled={!name.trim()}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.modalCreateBtnText}>만들기</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </TouchableOpacity>
     </Modal>
@@ -522,6 +568,7 @@ export default function AlbumScreen() {
       <NewFolderModal
         visible={showNewFolder}
         onClose={() => setShowNewFolder(false)}
+        folderCount={folders.length}
         onCreate={handleCreateFolder}
       />
       <FolderMenuModal

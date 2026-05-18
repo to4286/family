@@ -16,7 +16,8 @@ import {
   SafeAreaView,
   PanResponder,
 } from "react-native";
-import { Image } from "expo-image";
+import Constants from "expo-constants";
+import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
@@ -28,6 +29,39 @@ import Svg, { Path } from "react-native-svg";
 import { Colors } from "../constants/colors";
 import type { MainTabStackParamList } from "../navigation/types";
 import { supabase } from "../utils/supabase";
+
+let ImageZoom: any = null;
+const isExpoGo = Constants.appOwnership === "expo";
+if (!isExpoGo) {
+  try {
+    ImageZoom = require("@likashefqet/react-native-image-zoom").ImageZoom;
+  } catch (e) {
+    ImageZoom = null;
+  }
+}
+
+let useAnimatedReaction: any = null;
+let useSharedValue: any = null;
+let runOnJS: any = null;
+
+const isExpoGoAlbum = Constants.appOwnership === "expo";
+if (!isExpoGoAlbum) {
+  try {
+    const reanimated = require("react-native-reanimated");
+    useAnimatedReaction = reanimated.useAnimatedReaction;
+    useSharedValue = reanimated.useSharedValue;
+    runOnJS = reanimated.runOnJS;
+  } catch (e) {}
+}
+if (!useSharedValue) {
+  useSharedValue = (initial: number) => ({ value: initial });
+}
+if (!useAnimatedReaction) {
+  useAnimatedReaction = () => {};
+}
+if (!runOnJS) {
+  runOnJS = (fn: (...args: unknown[]) => unknown) => fn;
+}
 
 let KAView: any;
 if (Platform.OS === "android") {
@@ -114,6 +148,19 @@ export default function AlbumDetailScreen({ route }: Props) {
   const [photoReportSelected, setPhotoReportSelected] = useState<number | null>(null);
   const [photoReportCustomText, setPhotoReportCustomText] = useState("");
   const [photoReportKeyboardVisible, setPhotoReportKeyboardVisible] = useState(false);
+
+  const albumZoomScale = useRef(1);
+  const albumZoomScaleShared = useSharedValue(1);
+  const albumImageZoomRef = useRef<any>(null);
+
+  useAnimatedReaction(
+    () => albumZoomScaleShared.value,
+    (scale: number) => {
+      runOnJS((s: number) => {
+        albumZoomScale.current = s;
+      })(scale);
+    }
+  );
 
   const showCommentReportModalRef = useRef(false);
   const showPhotoReportModalRef = useRef(false);
@@ -462,20 +509,33 @@ export default function AlbumDetailScreen({ route }: Props) {
   }, []);
 
   const closeFullscreen = useCallback(() => {
+    albumZoomScale.current = 1;
+    albumZoomScaleShared.value = 1;
+    albumImageZoomRef.current?.reset();
     setShowFullscreen(false);
-  }, []);
+  }, [albumZoomScaleShared]);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gestureState) =>
-        Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 10,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        if (albumZoomScale.current > 1) return false;
+        return Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 10;
+      },
       onPanResponderMove: (_, gestureState) => {
+        if (albumZoomScale.current > 1) return;
         if (gestureState.dy > 0) {
           panY.setValue(gestureState.dy);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
+        if (albumZoomScale.current > 1) {
+          Animated.spring(panY, {
+            toValue: 0,
+            useNativeDriver: true,
+          }).start();
+          return;
+        }
         if (gestureState.dy > 150 || gestureState.vy > 1.5) {
           Animated.timing(panY, {
             toValue: WINDOW_HEIGHT,
@@ -502,8 +562,10 @@ export default function AlbumDetailScreen({ route }: Props) {
 
   const openFullscreen = useCallback(() => {
     panY.setValue(0);
+    albumZoomScale.current = 1;
+    albumZoomScaleShared.value = 1;
     setShowFullscreen(true);
-  }, [panY]);
+  }, [panY, albumZoomScaleShared]);
 
   const handleCommentSubmit = async () => {
     if (!text.trim()) return;
@@ -619,7 +681,7 @@ export default function AlbumDetailScreen({ route }: Props) {
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <TouchableOpacity style={styles.photo} activeOpacity={0.95} onPress={openFullscreen}>
             {imageUri ? (
-              <Image
+              <ExpoImage
                 source={{ uri: imageUri }}
                 style={styles.photoImage}
                 contentFit="cover"
@@ -636,7 +698,7 @@ export default function AlbumDetailScreen({ route }: Props) {
               comments.map((c) => (
                 <View key={c.id} style={styles.commentRow}>
                   {c.memberPhotoUri ? (
-                    <Image
+                    <ExpoImage
                       source={{ uri: c.memberPhotoUri }}
                       style={styles.commentAvatar}
                       contentFit="cover"
@@ -684,7 +746,7 @@ export default function AlbumDetailScreen({ route }: Props) {
           style={[styles.inputContainer, { paddingBottom: keyboardVisible ? 8 : insets.bottom + 12 }]}
         >
             {myProfile?.profile_image_url ? (
-              <Image
+              <ExpoImage
                 source={{ uri: myProfile.profile_image_url }}
                 style={styles.myAvatar}
                 contentFit="cover"
@@ -792,12 +854,34 @@ export default function AlbumDetailScreen({ route }: Props) {
               style={[styles.fullScreenPhotoContainer, { transform: [{ translateY: panY }] }]}
             >
               {imageUri ? (
-                <Image
-                  source={{ uri: imageUri }}
-                  style={styles.fullScreenPhoto}
-                  contentFit="contain"
-                  {...remoteImageCache(imageUri)}
-                />
+                ImageZoom ? (
+                  <ImageZoom
+                    ref={albumImageZoomRef}
+                    key={imageUri}
+                    uri={imageUri}
+                    scale={albumZoomScaleShared}
+                    minScale={1}
+                    maxScale={5}
+                    doubleTapScale={3}
+                    isDoubleTapEnabled
+                    isPanEnabled
+                    isPinchEnabled
+                    style={styles.fullScreenPhoto}
+                    resizeMode="contain"
+                    {...({
+                      onScaleChanged: (scale: number) => {
+                        albumZoomScale.current = scale;
+                      },
+                    } as any)}
+                  />
+                ) : (
+                  <ExpoImage
+                    source={{ uri: imageUri }}
+                    style={styles.fullScreenPhoto}
+                    contentFit="contain"
+                    {...remoteImageCache(imageUri)}
+                  />
+                )
               ) : null}
             </Animated.View>
           </SafeAreaView>

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
+  Alert,
   Animated,
   View,
   Text,
@@ -35,6 +36,7 @@ type Photo = {
 };
 
 const PHOTO_COLORS = ["#D4B896", "#C9A882", "#E8C9A0", "#B89878", "#DDBF9A", "#C4A87E", "#E0C8A8", "#BFA080", "#D8BC94"];
+const PHOTO_LIMIT = 20;
 
 /** 갤러리 표시용 날짜 문자열 → INSERT용 ISO (없으면 undefined) */
 function galleryLabelToOriginalDateIso(displayDate: string): string | undefined {
@@ -331,8 +333,27 @@ export default function AlbumPhotosScreen({ route }: Props) {
   }, [route.params?.refresh, route.params?.toast, loadPhotos, navigation, triggerToast]);
 
   const handleAddPhotos = async () => {
+    // 현재 사진 수 체크
+    if (photos.length >= PHOTO_LIMIT) {
+      Alert.alert(
+        "사진 저장 한도 도달",
+        `앨범당 최대 ${PHOTO_LIMIT}장까지 저장할 수 있어요.`
+      );
+      return;
+    }
+
     const pickedAssets = await handleMultipleImagePick();
     if (!pickedAssets || pickedAssets.length === 0) return;
+
+    // 선택한 사진 + 기존 사진이 제한을 초과하는지 체크
+    const remaining = PHOTO_LIMIT - photos.length;
+    if (pickedAssets.length > remaining) {
+      Alert.alert(
+        "사진 저장 한도 초과",
+        `${remaining}장만 더 추가할 수 있어요. 사진을 다시 선택해주세요.`
+      );
+      return;
+    }
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -485,7 +506,7 @@ export default function AlbumPhotosScreen({ route }: Props) {
             <Text style={styles.heroTitle}>{folderName}</Text>
             <View style={styles.heroBadge}>
               <Text style={styles.heroBadgeText}>
-                {photos.length}/{folderMaxCount}
+                {photos.length}/{PHOTO_LIMIT}
               </Text>
             </View>
           </View>

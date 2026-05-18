@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { View, Platform } from "react-native";
+import Constants from "expo-constants";
 import { NavigationContainer } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import * as Font from "expo-font";
@@ -7,6 +8,18 @@ import * as SplashScreen from "expo-splash-screen";
 import RootNavigator, { type RootStackEntryRoute } from "./src/navigation";
 import { Colors } from "./src/constants/colors";
 import { supabase } from "./src/utils/supabase";
+
+let GestureHandlerRootView: any;
+const isExpoGo = Constants.appOwnership === "expo";
+if (!isExpoGo) {
+  try {
+    GestureHandlerRootView = require("react-native-gesture-handler").GestureHandlerRootView;
+  } catch (e) {
+    GestureHandlerRootView = ({ children, style }: any) => <View style={style}>{children}</View>;
+  }
+} else {
+  GestureHandlerRootView = ({ children, style }: any) => <View style={style}>{children}</View>;
+}
 
 let KeyboardProvider: any;
 if (Platform.OS === "android") {
@@ -93,11 +106,13 @@ export default function App() {
   }
 
   return (
-    <KeyboardProvider>
-      <NavigationContainer>
-        <StatusBar style="dark" backgroundColor={Colors.bg} />
-        <RootNavigator initialRouteName={initialRoute} />
-      </NavigationContainer>
-    </KeyboardProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <KeyboardProvider>
+        <NavigationContainer>
+          <StatusBar style="dark" backgroundColor={Colors.bg} />
+          <RootNavigator initialRouteName={initialRoute} />
+        </NavigationContainer>
+      </KeyboardProvider>
+    </GestureHandlerRootView>
   );
 }
